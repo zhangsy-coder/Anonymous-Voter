@@ -1,3 +1,6 @@
+# 哈希链模块，用于实现哈希链表格的，入库，防多投，检查是否被篡改等功能
+# 属于底层函数实现，可以不用管他
+
 import hashlib
 from db_base import db_insert, db_query_all, get_db_connection, db_update
 
