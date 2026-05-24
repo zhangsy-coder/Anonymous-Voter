@@ -1,3 +1,6 @@
+#本模块实现了vote_main数据库表的，入库，防多投，设置有效值等功能
+#属于底层实现，无需管他
+
 # 模块2：投票数据持久化存储模块
 
 from db_base import db_insert, db_query_all, db_update
