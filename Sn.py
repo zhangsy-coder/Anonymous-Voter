@@ -1,6 +1,7 @@
 # sn_generator.py
 # 功能：用户登录后 → 检查有无SN → 无则生成并保存 → 保证全局唯一
-# Sn.py 完整修复版
+# 只需传入用户唯一ID（能代表用户唯一身份的）规定为身份证号
+# 用于生成大小写字母加数字的，随机十位字符串Sn
 import sys
 import random
 import string
