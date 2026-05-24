@@ -1,3 +1,7 @@
+#向 模拟主办方拥有的有权投票人信息表格 插入十个用户用于模拟 Sn生成等操作
+#直接运行即可
+
+
 # insert_test_users.py
 # 功能：自动向 vote_user_db.voter 插入 10 个测试用户
 # 账号：user1 ~ user10
