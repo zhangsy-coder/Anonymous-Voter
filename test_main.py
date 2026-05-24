@@ -1,3 +1,5 @@
+#本模块用于测试篡改哈希链，并测试能否检测到
+
 # test_tamper_two.py
 from hash_chain import verify_blockchain, tamper_two_blocks_test
 
