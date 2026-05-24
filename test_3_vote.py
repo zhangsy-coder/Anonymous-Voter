@@ -1,5 +1,6 @@
 # test_3_votes.py
-# 功能：连续投 4 票，测试存储、哈希链、防重复是否正常
+# 功能：模拟四个人投 4 票，测试存储、哈希链、防重复是否正常（虽然命名是3，但是实际模拟了投4票）
+
 
 from vote_storage import insert_vote, check_sn_exists
 from hash_chain import add_vote_to_chain, verify_blockchain, get_all_blocks
