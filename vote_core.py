@@ -1,3 +1,6 @@
+#本模块封装了投票的核心模块，全流程在此处体现
+#最下方两个函数，用于测试入库前的篡改攻击，和完整投票入库流程。
+
 # vote_core.py 用于封装投票系统核心逻辑：Sn 生成、哈希计算、盲签名流程、验签等
 
 import random
@@ -165,4 +168,4 @@ def test_tamper_attack():
 if __name__ == "__main__":
     test_tamper_attack()
 
-    #test_vote_core()
+    test_vote_core()
