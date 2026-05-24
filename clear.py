@@ -1,3 +1,6 @@
+#用于清空vote_main 和 hash_chain 表
+#直接运行即可
+
 from db_base import get_db_connection
 
 def clear_all_tables():
