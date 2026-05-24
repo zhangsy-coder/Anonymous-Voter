@@ -1,3 +1,8 @@
+#本模块用于汇总投票，得出选票结果
+#直接调用运行即可，无需传参
+#最下方第一个函数用于测试篡改，实际运行时要注释掉
+
+
 # vote_result.py 【最终汇总模块】
 from hash_chain import verify_blockchain, get_all_blocks, tamper_two_blocks_test
 from db_base import db_query_all, db_update
