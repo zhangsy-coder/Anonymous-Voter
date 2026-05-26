@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统登录 - SaaS 投票平台</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <script src="./js/auth.js"></script>
+
+    <style>
+        /* 登录页专用的额外小样式修饰 */
+        .header-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 15px;
+            color: #666;
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        /* 下拉菜单基础样式补充，确保与 input 框风格一致 */
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+            font-family: inherit;
+            background-color: white;
+            cursor: pointer;
+        }
+
+        select:focus {
+            border-color: #007bff;
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container" style="max-width: 400px; padding: 40px 30px;">
+        <div style="text-align: center;">
+            <div id="ui-icon" class="header-icon">🔒</div>
+            <h1 id="ui-title" style="margin-bottom: 5px;">系统登录</h1>
+            <div id="ui-subtitle" class="subtitle">正在加载安全环境...</div>
+        </div>
+
+        <form id="loginForm">
+            <div class="form-group" id="project-group" style="display: none;">
+                <label id="ui-label-project" for="project_select">选择投票项目 / Project</label>
+                <select id="project_select">
+                    <option value="" disabled selected>正在拉取活动列表...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label id="ui-label-user" for="username">账号 / Username</label>
+                <input type="text" id="username" required autocomplete="off" placeholder="请输入您的账号">
+            </div>
+
+            <div class="form-group">
+                <label id="ui-label-pass" for="password">密码 / Password</label>
+                <input type="password" id="password" required placeholder="请输入您的密码">
+            </div>
+
+            <div id="error-msg"
+                style="color: #dc3545; font-size: 13px; margin-bottom: 10px; text-align: center; display: none;"></div>
+
+            <button type="submit" id="ui-btn" class="login-btn">安全登录</button>
+        </form>
+
+        <a href="index.html" class="back-link">&larr; 返回选择其他身份</a>
+    </div>
+
+    <script>
+        // 全局保存当前登录类型
+        let currentLoginType = 'voter';
+
+        // ====================================================================
+        // 1. 页面初始化：动态 UI 渲染与项目数据拉取
+        // ====================================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            currentLoginType = urlParams.get('type') || 'voter';
+
+            const elIcon = document.getElementById('ui-icon');
+            const elTitle = document.getElementById('ui-title');
+            const elSubtitle = document.getElementById('ui-subtitle');
+            const elBtn = document.getElementById('ui-btn');
+            const projectGroup = document.getElementById('project-group');
+
+            if (currentLoginType === 'admin') {
+                elIcon.textContent = '⚙️';
+                elTitle.textContent = '主办方控制台';
+                elSubtitle.textContent = '请输入管理员账号以管理您的投票项目';
+                elBtn.textContent = '进入控制台';
+                elBtn.style.backgroundColor = '#007bff';
+                // 主办方不需要选项目，保持下拉菜单隐藏
+                projectGroup.style.display = 'none';
+            } else {
+                elIcon.textContent = '👥';
+                elTitle.textContent = '选民验证通道';
+                elSubtitle.textContent = '请先选择活动，再输入您的专属选民凭证';
+                elBtn.textContent = '验证身份并进入大厅';
+                elBtn.style.backgroundColor = '#28a745';
+
+                // 🚀 选民通道：显示下拉菜单，并向 Node.js 公开接口拉取数据
+                projectGroup.style.display = 'block';
+                loadPublicProjects();
+            }
+        });
+
+        // 🆕 获取公开的处于进行中的项目列表
+        async function loadPublicProjects() {
+            const selectEl = document.getElementById('project_select');
+            try {
+                // 注意：这里调用的是无需带 Token 的公共接口
+                const response = await fetch(`${CONFIG.API_BASE}/projects/public_list`);
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.data.length === 0) {
+                        selectEl.innerHTML = '<option value="" disabled selected>当前暂无进行中的投票项目</option>';
+                        document.getElementById('ui-btn').disabled = true;
+                        return;
+                    }
+
+                    // 动态组装选项
+                    selectEl.innerHTML = '<option value="" disabled selected>-- 请下拉选择您要参与的活动 --</option>';
+                    data.data.forEach(proj => {
+                        selectEl.innerHTML += `<option value="${proj.id}">${proj.title}</option>`;
+                    });
+                } else {
+                    selectEl.innerHTML = '<option value="" disabled selected>加载失败，请刷新重试</option>';
+                }
+            } catch (err) {
+                console.error("加载项目失败:", err);
+                selectEl.innerHTML = '<option value="" disabled selected>网络异常，无法获取活动列表</option>';
+            }
+        }
+
+        // ====================================================================
+        // 2. 核心登录逻辑：拦截并提交包含项目 ID 的数据包
+        // ====================================================================
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            let projectId = null;
+
+            const errorDiv = document.getElementById('error-msg');
+            const btn = document.getElementById('ui-btn');
+
+            // 🚀 【核心校验】：如果是选民登录，必须强校验是否选中了项目
+            if (currentLoginType === 'voter') {
+                projectId = document.getElementById('project_select').value;
+                if (!projectId) {
+                    errorDiv.textContent = '请先在上方选择您要参与的投票项目！';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+            }
+
+            // 视觉防抖
+            errorDiv.style.display = 'none';
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+            btn.textContent = '正在验证安全环境...';
+
+            try {
+                // 🚀 将 username, password, loginType 以及 projectId 一并打包发送给后端
+                const response = await fetch(`${CONFIG.API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username,
+                        password,
+                        loginType: currentLoginType,
+                        project_id: projectId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // 保存身份信息
+                    localStorage.setItem('token', data.data.token);
+                    localStorage.setItem('role', data.data.role);
+                    localStorage.setItem('username', data.data.username);
+                    localStorage.setItem('project_id', data.data.project_id || '');
+
+                    // 路由分流
+                    if (data.data.role === 'admin') {
+                        window.location.href = './admin/dashboard.html';
+                    } else if (data.data.role === 'voter') {
+                        window.location.href = './voter/vote_hall.html';
+                    }
+                } else {
+                    errorDiv.textContent = data.message;
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                console.error('网络请求失败:', err);
+                errorDiv.textContent = '无法连接到服务器，请检查网络或后端是否运行';
+                errorDiv.style.display = 'block';
+            } finally {
+                // 恢复按钮状态
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.textContent = currentLoginType === 'admin' ? '进入控制台' : '验证身份并进入大厅';
+            }
+        });
+    </script>
+</body>
+
+</html>

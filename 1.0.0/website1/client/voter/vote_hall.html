@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>匿名投票大厅 - 基于盲签名与哈希链</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+        }
+
+        .info-alert {
+            background-color: #e8f0fe;
+            color: #1967d2;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .candidate-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .candidate-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+        }
+
+        .candidate-card:hover {
+            border-color: #1a73e8;
+            background-color: #f8faff;
+        }
+
+        .candidate-card input {
+            margin-right: 15px;
+            transform: scale(1.5);
+        }
+
+        .vote-btn {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 15px 0;
+            width: 100%;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        .vote-btn:hover {
+            background-color: #1557b0;
+        }
+
+        .vote-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* 密码学实时日志控制台样式 */
+        .crypto-console {
+            margin-top: 30px;
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            height: 250px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .crypto-console p {
+            margin: 5px 0;
+        }
+
+        .log-step {
+            color: #4af626;
+        }
+
+        .log-warn {
+            color: #ffeb3b;
+        }
+
+        .log-error {
+            color: #f44336;
+        }
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js"></script>
+    <script src="../js/auth.js"></script>
+</head>
+
+<body>
+    <nav class="navbar"
+        style="background-color: #1a73e8; color: white; padding: 15px 40px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h2 id="nav-project-title" style="margin: 0; font-size: 18px;">🗳️ 区块链匿名投票大厅</h2>
+        <button onclick="AuthUtils.clearAuth(); window.location.href='../index.html';"
+            style="background-color: rgba(255,255,255,0.2); border: 1px solid white; color: white; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
+            &larr; 退出大厅并返回首页
+        </button>
+    </nav>
+    <div class="container">
+        <h1>🗳️ 区块链匿名投票大厅</h1>
+        <div class="info-alert">
+            <strong>🔒 安全保障提示：</strong> 本系统采用 Textbook RSA 盲签名技术。您的选票将在本地被数学“遮掩”，主办方只能为您签名但无法知晓您投给谁。投票投递时，系统将自动抹除您的身份信息。
+        </div>
+
+        <div class="candidate-list" id="candidateForm">
+            <p style="text-align: center; color: #666;">正在连接密码学引擎并拉取候选人数据...</p>
+        </div>
+
+        <button id="voteBtn" class="vote-btn" onclick="executeVotingProtocol()">安全投票并上链</button>
+
+        <div class="crypto-console" id="cryptoConsole">
+            <p>系统初始化就绪，等待执行盲签名协议...</p>
+        </div>
+    </div>
+
+    <script src="../js/vote_crypto.js"></script>
+
+    <script>
+        // ==========================================
+        // 🔧 全局配置与状态提取
+        // ==========================================
+
+        // 动态获取当前选民绑定的项目 ID（从 localStorage 提取）
+        const CURRENT_PROJECT_ID = AuthUtils.getProjectId();
+        // Python 区块链引擎的公网/内网直连地址
+        const PYTHON_SERVER_URL = "http://127.0.0.1:5000";
+
+        const consoleDiv = document.getElementById('cryptoConsole');
+
+        // 日志打印辅助函数
+        function logToConsole(message, type = 'step') {
+            consoleDiv.style.display = 'block';
+            const p = document.createElement('p');
+            p.className = type === 'error' ? 'log-error' : (type === 'warn' ? 'log-warn' : 'log-step');
+            p.innerText = `> ${message}`;
+            consoleDiv.appendChild(p);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight; // 自动滚动到底部
+        }
+
+        // ===================================================================
+        // 🌟 页面初始化：动态拉取 SaaS 数据 (候选人列表 + 项目公钥)
+        // ===================================================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!CURRENT_PROJECT_ID) {
+                alert("未检测到您的投票项目信息，说明身份凭证不完整，请重新登录！");
+                window.location.href = '../login.html';
+                return;
+            }
+
+            try {
+                // 使用 auth.js 里的封装函数，自动带上 JWT Token，请求 Node.js 网关
+                const response = await fetchWithAuth(`/vote/project_info?project_id=${CURRENT_PROJECT_ID}`);
+                const data = await response.json();
+
+                if (!data.success) throw new Error(data.message);
+
+                // 1. 把服务器传来的公钥喂给密码学大脑
+                VoteCrypto.init(data.public_key);
+
+                // 2. 动态渲染候选人列表
+                const form = document.getElementById('candidateForm');
+                form.innerHTML = ''; // 清空加载提示
+
+                if (data.candidates.length === 0) {
+                    form.innerHTML = '<p style="color:red; text-align:center;">主办方暂未配置候选人，请稍后再来</p>';
+                    document.getElementById('voteBtn').disabled = true;
+                    return;
+                }
+
+                data.candidates.forEach(cand => {
+                    form.innerHTML += `
+                        <label class="candidate-card">
+                            <input type="radio" name="candidate" value="${cand.serial_no}">
+                            <span><strong>${cand.name}</strong> - 候选人编号: ${cand.serial_no}</span>
+                        </label>
+                    `;
+                });
+            } catch (err) {
+                alert("初始化大厅失败: " + err.message);
+                document.getElementById('voteBtn').disabled = true;
+            }
+        });
+
+        // ===================================================================
+        // 🚀 核心逻辑：执行密码学两阶段投票协议
+        // ===================================================================
+        async function executeVotingProtocol() {
+            const selected = document.querySelector('input[name="candidate"]:checked');
+            if (!selected) {
+                alert("请先选择一位候选人！");
+                return;
+            }
+
+            // 出于隐私脱敏，实际上链存储的是候选人的编号 (serial_no)
+            const candidateName = selected.value;
+            const voteBtn = document.getElementById('voteBtn');
+
+            try {
+                voteBtn.disabled = true;
+                voteBtn.innerText = "协议执行中，请勿关闭页面...";
+                consoleDiv.innerHTML = ''; // 清空日志
+
+                // ===================================================================
+                // 🛡️ 阶段一：本地盲化，并向 Node.js 发起实名索要签名
+                // ===================================================================
+                logToConsole(`1. [本地操作] 正在为候选人编号 ${candidateName} 生成随机凭证 Sn 和盲因子...`);
+
+                // 调用 vote_crypto.js 的盲化算法
+                const blindData = VoteCrypto.blindVote(candidateName);
+                logToConsole(`[本地加密] 计算出盲化数据 r': ${blindData.r_prime.substring(0, 30)}...`);
+
+                logToConsole(`2. [网络请求] 携带实名 Token，向 Node.js 网关申请盲签名...`);
+
+                // 使用 fetchWithAuth 请求网关，透传 project_id
+                const nodeResponse = await fetchWithAuth(`/vote/request_sign`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        project_id: CURRENT_PROJECT_ID,
+                        r_prime: blindData.r_prime
+                    })
+                });
+
+                const nodeData = await nodeResponse.json();
+                if (!nodeData.success) {
+                    throw new Error(`网关拒绝签发: ${nodeData.message}`);
+                }
+                logToConsole(`[网关响应] 获取到主办方盲签名 S': ${nodeData.s_prime.substring(0, 30)}...`);
+
+                // ===================================================================
+                // 🕊️ 阶段二：本地去盲，抹除身份，跨域向 Python 直接投递上链
+                // ===================================================================
+                logToConsole(`3. [本地操作] 正在使用盲因子逆元进行去盲运算...`);
+
+                // 调用 vote_crypto.js 的去盲算法
+                const finalVote = VoteCrypto.unblindSignature(nodeData.s_prime);
+                logToConsole(`[本地解密] 成功提取真实签名 S: ${finalVote.S.substring(0, 30)}...`);
+
+                logToConsole(`4. [安全机制] 正在从浏览器彻底抹除实名 JWT Token，切断身份关联！`, 'warn');
+
+                // 【硬核操作】：彻底清理身份痕迹
+                AuthUtils.clearAuth();
+
+                logToConsole(`5. [网络请求] 以完全匿名状态，直接向 Python 区块链网络广播选票...`);
+
+                // 直接请求 Python 时，也要告知是哪个项目的票，以便 Python 使用对应的公钥验签
+                const pyResponse = await fetch(`${PYTHON_SERVER_URL}/python/cast_vote`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        project_id: CURRENT_PROJECT_ID,
+                        r: finalVote.r,
+                        Sn: finalVote.Sn,
+                        S: finalVote.S
+                    })
+                });
+
+                const pyData = await pyResponse.json();
+                if (!pyData.success) {
+                    throw new Error(`区块链拒绝接收: ${pyData.message}`);
+                }
+
+                // ===================================================================
+                // 🎉 完美闭环：处理成功后的 UI 逻辑 (修复自动跳转问题)
+                // ===================================================================
+                // ===================================================================
+                // 🎉 完美闭环：处理成功后的 UI 逻辑 (展示终极密码学回执单)
+                // ===================================================================
+                logToConsole(`🎉 [交易确认] ${pyData.message}`);
+                logToConsole(`✔️ 协议执行完毕。您的选票已被永久存证，且无人知晓您的身份！`);
+
+                voteBtn.style.display = 'none'; // 隐藏投票按钮
+
+                // 🚀 新增：在页面上渲染出极其醒目的“防篡改回执单”
+                const receiptDiv = document.createElement('div');
+                receiptDiv.innerHTML = `
+                    <div style="background-color: #fff3cd; border: 2px dashed #ffc107; padding: 25px; margin-top: 30px; border-radius: 8px; color: #856404; text-align: left; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                        <h2 style="margin-top: 0; color: #d39e00; border-bottom: 1px solid #ffeeba; padding-bottom: 10px;">⚠️ 极其重要：请立刻保存您的选票凭证！</h2>
+                        <p style="font-size: 15px; line-height: 1.6;">为了保证绝对的零知识匿名，系统现已<strong>彻底销毁您的实名绑定信息</strong>。如果您未来想在公示大盘验证自己的选票是否被后台篡改，<strong>必须</strong>依靠以下三个数据进行密码学核算。</p>
+                        <p style="color: #dc3545; font-weight: bold; font-size: 14px;">一旦关闭此页面，全宇宙将没有任何人能帮您找回这组凭证！请立刻拍照或复制保存：</p>
+                        
+                        <div style="background: #ffffff; padding: 15px; border-radius: 6px; font-family: 'Courier New', Courier, monospace; font-size: 14px; border: 1px solid #ffeeba; margin-top: 15px;">
+                            <div style="margin-bottom: 10px;"><strong>1. 秘密凭证 (Secret Sn)</strong>: <span style="color: #1a73e8; font-weight: bold; font-size: 16px;">${finalVote.Sn}</span></div>
+                            <div style="margin-bottom: 10px;"><strong>2. 投递选项 (Chosen r)</strong>: <span style="color: #28a745; font-weight: bold; font-size: 16px;">${finalVote.r}</span></div>
+                            <div><strong>3. 真实签名 (RSA S)</strong>: <br><span style="word-break: break-all; font-size: 12px; color: #666;">${finalVote.S}</span></div>
+                        </div>
+
+                        <button onclick="window.location.href='../index.html'" style="margin-top: 20px; width: 100%; background-color: #4caf50; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold;">我已妥善保存，安全返回首页大厅</button>
+                    </div>
+                `;
+
+                // 将回执单插入到控制台上方
+                document.querySelector('.container').insertBefore(receiptDiv, consoleDiv);
+
+                alert("✅ 投票成功上链！\n\n请不要立刻关闭页面！请务必查阅并保存页面下方出现的【黄色选票凭证单】，这是您防篡改查验的唯一依据。");
+            } catch (error) {
+                logToConsole(error.message, 'error');
+                alert(`投票失败: ${error.message}`);
+                voteBtn.disabled = false;
+                voteBtn.innerText = "重试";
+            }
+        }
+    </script>
+
+</body>
+
+</html>

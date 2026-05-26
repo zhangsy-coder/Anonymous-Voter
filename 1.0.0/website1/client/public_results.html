@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公开计票详情与自证 (纯净脱机版)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js"></script>
+    <script src="./js/vote_crypto.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .nav-header {
+            width: 100%;
+            background: #fff;
+            padding: 15px 40px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            display: flex;
+            justify-content: space-between;
+            box-sizing: border-box;
+        }
+
+        .nav-header a {
+            text-decoration: none;
+            color: #1a73e8;
+            font-weight: bold;
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: 900px;
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+
+        @media (max-width: 800px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                padding: 0 20px;
+            }
+        }
+
+        /* 左侧排榜单样式 */
+        .leaderboard-panel {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .leaderboard-panel h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #f0f2f5;
+            padding-bottom: 10px;
+            font-size: 20px;
+        }
+
+        .rank-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .rank-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid #f0f2f5;
+        }
+
+        .rank-item:last-child {
+            border-bottom: none;
+        }
+
+        .rank-num {
+            font-weight: bold;
+            color: #999;
+            margin-right: 15px;
+            font-size: 18px;
+        }
+
+        .rank-item.top-1 .rank-num {
+            color: #ffd700;
+            font-size: 22px;
+        }
+
+        .rank-item.top-2 .rank-num {
+            color: #c0c0c0;
+        }
+
+        .rank-item.top-3 .rank-num {
+            color: #cd7f32;
+        }
+
+        .cand-info {
+            flex-grow: 1;
+        }
+
+        .cand-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            display: block;
+        }
+
+        .cand-serial {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .cand-votes {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1a73e8;
+        }
+
+        /* 右侧暗黑沙盒样式 */
+        .crypto-sandbox {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .crypto-sandbox h2 {
+            color: #38bdf8;
+            margin-top: 0;
+            font-size: 18px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 10px;
+        }
+
+        .sandbox-group {
+            margin-bottom: 15px;
+        }
+
+        .sandbox-group label {
+            display: block;
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+
+        .sandbox-group input {
+            width: 100%;
+            padding: 10px 12px;
+            background: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+
+        .sandbox-group input:focus {
+            border-color: #38bdf8;
+            outline: none;
+        }
+
+        .verify-btn {
+            width: 100%;
+            background-color: #0284c7;
+            color: white;
+            border: none;
+            padding: 14px 0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 15px;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+
+        .verify-btn:hover {
+            background-color: #0369a1;
+        }
+
+        .verify-result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 13px;
+            line-height: 1.5;
+            display: none;
+            word-wrap: break-word;
+        }
+
+        .result-success {
+            background-color: #065f46;
+            color: #34d399;
+            border: 1px solid #047857;
+        }
+
+        .result-fail {
+            background-color: #991b1b;
+            color: #f87171;
+            border: 1px solid #b91c1c;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="nav-header">
+        <h3 id="page-title" style="margin: 0; color: #333;">区块公示板加载中...</h3>
+        <a href="index.html">&larr; 返回历史大厅</a>
+    </header>
+
+    <div class="main-container">
+        <div class="leaderboard-panel">
+            <h2>📊 完整候选人得票排行</h2>
+            <ul class="rank-list" id="leaderboard">
+                <p style="text-align: center; color: #888;">正在统计链上数据...</p>
+            </ul>
+        </div>
+
+        <div class="crypto-sandbox">
+            <h2>🔍 选票防篡改核验引擎 (脱机模式)</h2>
+            <p style="font-size: 12px; color: #94a3b8; margin-top: 0; margin-bottom: 20px;">
+                最高安全级别验证：不向服务器发送任何查询请求。只要您输入保存的三元组，系统将在本地通过大整数模幂运算还原真相。
+            </p>
+
+            <form id="verifyForm" onsubmit="handleVerify(event)">
+                <div class="sandbox-group">
+                    <label>秘密凭证 / Secret Sn</label>
+                    <input type="text" id="verify_sn" required placeholder="请输入10位回执凭证" autocomplete="off">
+                </div>
+                <div class="sandbox-group">
+                    <label>投递的选项 / Chosen r</label>
+                    <input type="text" id="verify_r" required placeholder="例如：04" autocomplete="off">
+                </div>
+                <div class="sandbox-group">
+                    <label>真实数字签名 / RSA Signature S</label>
+                    <input type="text" id="verify_s" required placeholder="请粘贴一长串十六进制签名字符" autocomplete="off">
+                </div>
+                <button type="submit" class="verify-btn">🛡️ 启动本地离线自证</button>
+            </form>
+
+            <div id="verifyResultBox" class="verify-result"></div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const projectId = urlParams.get('project_id');
+        const NODE_API = "http://127.0.0.1:3000/api";
+        const PYTHON_API = "http://127.0.0.1:5000/python";
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!projectId) {
+                alert("未指定查看的项目 ID");
+                window.location.href = 'index.html';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${NODE_API}/projects/public_results/${projectId}`);
+                const data = await res.json();
+                if (!data.success) {
+                    document.getElementById('leaderboard').innerHTML = `<p style="color:red; text-align:center;">${data.message}</p>`;
+                    return;
+                }
+                document.getElementById('page-title').innerText = `🏆 【${data.data.projectTitle}】 结果公示`;
+
+                const listEl = document.getElementById('leaderboard');
+                listEl.innerHTML = '';
+
+                data.data.candidates.forEach((cand, index) => {
+                    const rankClass = index < 3 ? `top-${index + 1}` : '';
+                    const rankNum = index + 1;
+                    listEl.innerHTML += `
+                        <li class="rank-item ${rankClass}">
+                            <span class="rank-num">#${rankNum}</span>
+                            <div class="cand-info">
+                                <span class="cand-name">${cand.name}</span>
+                                <span class="cand-serial">编号: ${cand.serial_no}</span>
+                            </div>
+                            <span class="cand-votes">${cand.vote_count} 票</span>
+                        </li>
+                    `;
+                });
+            } catch (err) {
+                document.getElementById('leaderboard').innerHTML = '<p style="color:red;">无法连接计票服务器</p>';
+            }
+        });
+
+        // 🚀 核心逻辑：最高安全级别的脱机校验
+        async function handleVerify(e) {
+            e.preventDefault();
+            const sn = document.getElementById('verify_sn').value.trim();
+            const r = document.getElementById('verify_r').value.trim();
+            const S = document.getElementById('verify_s').value.trim(); // 用户自己提供的证据
+
+            const resultBox = document.getElementById('verifyResultBox');
+            resultBox.style.display = 'block';
+            resultBox.className = "verify-result";
+            resultBox.innerText = "⏳ 正在提取项目公钥...";
+
+            try {
+                // 1. 获取公钥（这是唯一一次网络请求，获取公开的验证锁，不暴露任何用户隐私）
+                const keyRes = await fetch(`${PYTHON_API}/get_public_key?project_id=${projectId}`);
+                const keyData = await keyRes.json();
+                if (!keyData.success) throw new Error("公钥提取失败，环境异常");
+
+                resultBox.innerText = "⏳ 公钥提取完毕，正在浏览器本地执行 Textbook RSA 模幂对撞...";
+
+                // 2. 🚀 完全脱机：使用用户自己提供的数据对撞 S^e mod N == H(r || Sn)
+                const report = VoteCrypto.verifyVoteOnChain(r, sn, S, keyData.public_key);
+
+                if (!report.success) throw new Error(report.message);
+
+                // 3. 判定真理
+                if (report.isValid) {
+                    resultBox.classList.add('result-success');
+                    resultBox.innerHTML = `
+                        <strong>🟢 密码学校验通过！选票完整且绝对抗抵赖</strong><br><br>
+                        您提供的签名证据 <strong style="color:white">${S.substring(0, 8)}...</strong> 是绝对有效的！<br>
+                        因为除了主办方的私钥，无人能伪造出能解密为 <strong style="color:white">${r}</strong> 和 <strong style="color:white">${sn}</strong> 的签名组合。<br><br>
+                        <strong>本地对撞数据流：</strong><br>
+                        • 签名公钥还原: <span style="font-family:monospace; color:#ccc;">${report.recoveredHash.substring(0, 20)}...</span><br>
+                        • 浏览器本地重构: <span style="font-family:monospace; color:#ccc;">${report.localHash.substring(0, 20)}...</span>
+                    `;
+                } else {
+                    resultBox.classList.add('result-fail');
+                    resultBox.innerHTML = `
+                        <strong>❌ 验签失败：数据伪造或篡改！</strong><br><br>
+                        公钥还原出的数据与本地重构的哈希不匹配。<br>
+                        <strong>冲突审计：</strong><br>
+                        • 本地重构哈希: <span style="font-family:monospace; color:#f87171;">${report.localHash.substring(0, 16)}...</span><br>
+                        • 签名模幂还原: <span style="font-family:monospace; color:#f87171;">${report.recoveredHash.substring(0, 16)}...</span><br><br>
+                        可能的原因：您输入的凭证、选项或签名有误，或者这组数据并非由当前活动的私钥签发。
+                    `;
+                }
+            } catch (err) {
+                resultBox.classList.add('result-fail');
+                resultBox.innerText = "⚠️ 验证阻断: " + err.message;
+            }
+        }
+    </script>
+</body>
+
+</html>

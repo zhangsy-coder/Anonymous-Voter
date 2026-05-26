@@ -1,0 +1,209 @@
+/* ==========================================================================
+   SaaS 多项目投票系统 - 全局样式规范 (Design System)
+   ========================================================================== */
+
+/* 1. CSS 变量定义 (主题色与间距常量) */
+:root {
+    --primary-blue: #007bff;
+    --primary-blue-hover: #0056b3;
+    --success-green: #28a745;
+    --success-green-hover: #218838;
+    --danger-red: #dc3545;
+    --danger-red-hover: #c82333;
+    --bg-color: #f4f7f6;
+    --text-main: #333333;
+    --text-muted: #666666;
+    --border-color: #eef2f1;
+    --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    --hover-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* 2. 基础复位 (Reset) */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+}
+
+/* ==========================================================================
+   布局组件 (Layout Components)
+   ========================================================================== */
+/* 通用居中容器 (用于登录页) */
+.container {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+    width: 100%;
+    margin-top: 6vh;
+}
+
+/* 顶部导航栏基类 */
+.navbar {
+    width: 100%;
+    color: white;
+    padding: 15px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 网格系统 (Grid System) */
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 25px;
+}
+
+/* ==========================================================================
+   表单与输入框 (Forms & Inputs)
+   ========================================================================== */
+.form-group {
+    margin-bottom: 18px;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.form-group label {
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+input[type="text"],
+input[type="password"],
+textarea {
+    padding: 12px 14px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+textarea:focus {
+    border-color: var(--primary-blue);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+    /* 柔和的发光焦点态 */
+}
+
+/* ==========================================================================
+   按钮变体系统 (Button Variant System)
+   ========================================================================== */
+button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    color: #ffffff;
+}
+
+button:active {
+    transform: scale(0.98);
+    /* 点击时的微缩放反馈 */
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* 默认按钮 (科技蓝) */
+.btn-primary {
+    background-color: var(--primary-blue);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--primary-blue-hover);
+}
+
+/* 成功/选民按钮 (安全绿) */
+.btn-success {
+    background-color: var(--success-green);
+}
+
+.btn-success:hover:not(:disabled) {
+    background-color: var(--success-green-hover);
+}
+
+/* 危险/删除按钮 (警示红) */
+.btn-danger {
+    background-color: var(--danger-red);
+}
+
+.btn-danger:hover:not(:disabled) {
+    background-color: var(--danger-red-hover);
+}
+
+/* 大尺寸块级按钮 */
+.login-btn {
+    width: 100%;
+    margin-top: 15px;
+    padding: 14px;
+    font-size: 16px;
+    border-radius: 6px;
+}
+
+/* ==========================================================================
+   数据表格系统 (Data Tables)
+   ========================================================================== */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #ffffff;
+}
+
+th,
+td {
+    padding: 14px 15px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    /* SaaS 后台通常采用左对齐提升阅读性 */
+    font-size: 14px;
+}
+
+th {
+    background-color: #f8fbfa;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+tbody tr:hover {
+    background-color: #fcfdfc;
+    /* 鼠标悬浮高亮当前行 */
+}
+
+/* ==========================================================================
+   通用交互卡片 (Interactive Cards)
+   ========================================================================== */
+.card {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 25px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--card-shadow);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* 赋予卡片悬浮时的浮雕质感 */
+.card-hoverable:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--hover-shadow);
+}

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaaS 多项目投票平台 - 门户首页</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <style>
+        body {
+            justify-content: flex-start;
+            padding: 30px 20px;
+            background-color: #f8fafc;
+        }
+
+        .portal-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            width: 100%;
+            max-width: 900px;
+            margin-top: 20px;
+            margin-bottom: 40px;
+        }
+
+        .portal-card {
+            background: #ffffff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            border: 1px solid #e2e8f0;
+        }
+
+        .portal-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        }
+
+        .portal-card h2 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #1e293b;
+            font-size: 18px;
+        }
+
+        .portal-card p {
+            color: #64748b;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .admin-accent {
+            border-top: 5px solid #007bff;
+        }
+
+        .voter-accent {
+            border-top: 5px solid #28a745;
+        }
+
+        /* 历史面板样式居中优化 */
+        .showcase-panel {
+            width: 100%;
+            max-width: 700px;
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+            margin: 0 auto;
+        }
+
+        .showcase-panel h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #0f172a;
+            border-bottom: 2px solid #f1f5f9;
+            padding-bottom: 10px;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .history-item {
+            background-color: #f8fafc;
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 15px;
+            border: 1px solid #edf2f7;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .history-item:hover {
+            border-color: #007bff;
+            background-color: #f0f7ff;
+            transform: scale(1.02);
+        }
+
+        .history-info h4 {
+            margin: 0 0 5px 0;
+            color: #334155;
+            font-size: 16px;
+        }
+
+        .history-info p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .winner-tag {
+            background-color: #fef3c7;
+            color: #d97706;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            border: 1px solid #fde68a;
+            text-align: right;
+        }
+    </style>
+    <script>
+        window.onload = () => {
+            const token = localStorage.getItem('token');
+            const role = localStorage.getItem('role');
+            if (token && role) {
+                if (role === 'admin') window.location.href = './admin/dashboard.html';
+                else if (role === 'voter') window.location.href = './voter/vote_hall.html';
+            }
+            loadHistoryShowcase();
+        };
+    </script>
+</head>
+
+<body>
+    <div style="text-align: center; margin-top: 10px; margin-bottom: 10px;">
+        <h1 style="font-size: 26px; color: #1e293b; margin-bottom: 6px;">🗳️ SaaS 多项目分布式匿名投票平台</h1>
+        <p style="color: #64748b; font-size: 14px; margin: 0;">多租户数据隔离 · 零知识密码学自证沙盒 · 底层不可篡改哈希链</p>
+    </div>
+
+    <div class="portal-wrapper">
+        <div class="portal-card admin-accent" onclick="window.location.href='login.html?type=admin'">
+            <h2>⚙️ 我是活动主办方 / 管理员</h2>
+            <p>点击进入控制台。您可以开启、关停多个租户活动；批量注入候选人、一键分发动态选民通行证。</p>
+            <button class="portal-btn" style="background-color: #007bff; width: 80%;">配置与管理项目 &rarr;</button>
+        </div>
+        <div class="portal-card voter-accent" onclick="window.location.href='login.html?type=voter'">
+            <h2>👥 我是普通投票者 / 选民</h2>
+            <p>持有活动分发的凭证。输入账号和密码登录后，系统将自动绑定您的多租户上下文进入大厅。</p>
+            <button class="portal-btn" style="background-color: #28a745; width: 80%;">验证身份并领票 &rarr;</button>
+        </div>
+    </div>
+
+    <section class="showcase-panel">
+        <h3>🏆 历史选举结果公示 (点击查看排榜与自证)</h3>
+        <div id="history-container">
+            <p style="color: #94a3b8; text-align: center; font-size: 13px; padding-top: 20px;">正在连接关系型大盘捞取归档项目数据...</p>
+        </div>
+    </section>
+
+    <script>
+        async function loadHistoryShowcase() {
+            const container = document.getElementById('history-container');
+            try {
+                const response = await fetch(`http://127.0.0.1:3000/api/projects/public_ended_list`);
+                const data = await response.json();
+                if (data.success && data.data.length > 0) {
+                    container.innerHTML = '';
+                    data.data.forEach(proj => {
+                        const dateStr = new Date(proj.created_at).toLocaleDateString();
+                        // 🚀 点击整张卡片，带着项目ID跳转到新页面
+                        container.innerHTML += `
+                            <div class="history-item" onclick="window.location.href='public_results.html?project_id=${proj.id}'">
+                                <div class="history-info">
+                                    <h4>${proj.title} <span style="font-size:12px; color:#007bff; border:1px solid #007bff; padding:2px 4px; border-radius:4px; margin-left:8px;">查看详情 &rarr;</span></h4>
+                                    <p>归档时间: ${dateStr} | 链上合约 ID: ${proj.id}</p>
+                                </div>
+                                <div class="winner-tag">
+                                    👑 最终当选: ${proj.winner.name}<br>
+                                    <span style="font-weight:normal; font-size:11px;">得票: ${proj.winner.vote_count} 票</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    container.innerHTML = '<p style="color: #94a3b8; text-align: center; font-size: 13px; padding-top: 20px;">📭 暂无已结束并封盘的投票项目公示。</p>';
+                }
+            } catch (err) {
+                container.innerHTML = '<p style="color: red; text-align: center; font-size: 12px; padding-top: 20px;">🔴 网关离线，无法加载成果公示。</p>';
+            }
+        }
+    </script>
+</body>
+
+</html>
