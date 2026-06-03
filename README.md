@@ -12,7 +12,7 @@
 
 ## ✨ 核心特性
 
-- **🛡️ 绝对匿名性 (Anonymity)**：基于 RSA 盲签名（Blind Signature），主办方仅能对被“数学盲化”的选票进行盖章，系统在投递前会自动物理抹除 JWT 身份令牌，实现 100% 人票分离。
+- **🛡️ 绝对匿名性 (Anonymity)**：基于 RSA 盲签名（Blind Signature），主办方仅能对被“数学盲化”的选票进行盖章，系统在投递前会自动物理抹除 JWT 身份令牌，实现人票分离。
 - **🔍 端到端自证 (E2E Verifiability)**：不依赖可信第三方！选民凭借投票时在本地生成的秘密凭证 $(Sn)$ 与真实签名 $(S)$，可在完全脱机的纯前端沙盒中，通过大整数模幂运算 $S^e \pmod N \equiv H(r||Sn)$ 自证选票未被篡改。
 - **⛓️ 防篡改哈希链 (Tamper-evident Hash Chain)**：底层 Python 引擎将选票作为区块（Block）进行串联，$Hash_{curr} = SHA256(Hash_{prev} + Sn + r + S)$，任何针对 MySQL 的“脱库篡改”都会导致哈希雪崩并被探针立刻捕获。
 - **🚫 防多投机制 (Anti-Double Voting)**：实名领票阶段（Node.js 网关）记录用户领取日志；匿名投递阶段（Python 区块链）利用唯一约束防御凭证重放攻击（Replay Attack）。
@@ -68,7 +68,7 @@ anonymous-voter/
 │   │   └── project_manage.html # 项目深度管理 (批量导入、结束封盘、导出CSV)
 │   ├── voter/                  # 选民通道页面
 │   │   └── vote_hall.html      # 匿名投票大厅 (包含完整盲签协议交互及安全退出机制)
-│   ├── js/                     
+│   ├── js/
 │   │   ├── auth.js             # JWT 拦截器与 Token/Role 状态管理
 │   │   └── vote_crypto.js      # 【核心】前端密码学引擎 (大整数运算、盲化、去盲、验证)
 │   ├── index.html              # 门户首页 (动态路由分流、历史归档卡片)
@@ -78,7 +78,7 @@ anonymous-voter/
 ├── server/                     # 🟢 Node.js 业务网关 (BFF 层)
 │   ├── app.js                  # Express 服务器入口及 CORS 配置
 │   ├── config/db.js            # MySQL 数据库连接池配置
-│   ├── middleware/             # 
+│   ├── middleware/             #
 │   │   └── authMiddleware.js   # JWT 令牌拦截及多租户身份识别
 │   ├── routes/                 # 业务路由
 │   │   ├── auth.js             # 登录下发 Token (按角色路由)
@@ -86,7 +86,7 @@ anonymous-voter/
 │   │   ├── candidate.js        # 候选人管理
 │   │   ├── user.js             # 批量导入与分发选民通行证
 │   │   └── vote.js             # 盲签名实名中转与核销接口
-│   └── package.json            
+│   └── package.json
 │
 ├── py_server/                  # 🐍 Python 区块链与密码学微服务
 │   ├── app.py                  # Flask 主服务 (暴露密钥生成、盲签、上链、沙盒查票接口)
@@ -135,7 +135,7 @@ anonymous-voter/
    - 首页 `index.html` 动态渲染历史卡片。
 6. **脱机验证与自证清白**：
    - 任何人点击进入 `public_results.html`。
-   - 选民输入自己保存的 $(Sn, r, S)$，沙盒仅从服务器请求公钥，随后进行纯本地零知识对撞，核验 $S^e \pmod N \equiv H(r||Sn)$，击碎任何对系统后台的质疑。
+   - 选民输入自己保存的 $(Sn, r, S)$，沙盒仅从服务器请求公钥，随后进行纯本地零知识对撞，核验 $S^e \pmod N \equiv H(r||Sn)$，可以有效解决对系统后台的质疑。
 
 ---
 
@@ -145,6 +145,7 @@ anonymous-voter/
 
 在 MySQL 中建立库并导入所需的建表 SQL 语句，确保 `hash_chain` 表包含自增主键、唯一凭证键与哈希指针字段。
 修改以下两处的数据库连接配置（账号、密码、库名）：
+
 - `server/config/db.js`
 - `py_server/db_base.py`
 
