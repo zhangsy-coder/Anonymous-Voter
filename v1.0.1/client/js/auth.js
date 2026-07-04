@@ -10,7 +10,7 @@ const CONFIG = {
     // 切换环境只需改这一行：
     // 本地开发填 'http://127.0.0.1:3000/api'
     // 上线云服务器填 'http://你的公网IP:3000/api'
-    API_BASE: 'http://127.0.0.1:3000/api'
+    API_BASE: `${window.APP_CONFIG.NODE_API}/api`
 };
 
 // 2. 身份状态提取工具

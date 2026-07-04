@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="../js/config.js"></script>
     <title>匿名投票大厅 - 基于盲签名与哈希链</title>
     <style>
         body {
@@ -156,7 +157,7 @@
         // 动态获取当前选民绑定的项目 ID（从 localStorage 提取）
         const CURRENT_PROJECT_ID = AuthUtils.getProjectId();
         // Python 区块链引擎的公网/内网直连地址
-        const PYTHON_SERVER_URL = "http://127.0.0.1:5000";
+        const PYTHON_SERVER_URL = window.APP_CONFIG.PY_API;
 
         const consoleDiv = document.getElementById('cryptoConsole');
 
