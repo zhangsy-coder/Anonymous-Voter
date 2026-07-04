@@ -19,6 +19,8 @@ from hash_chain import (
     create_genesis_block,
     get_block_by_sn,
 )
+# 引入本地 AI 审计模块
+from hash_chain import ai_content_security_audit
 
 app = Flask(__name__)
 
@@ -175,7 +177,25 @@ def cast_vote():
                 ),
                 403,
             )
-
+        # =====================================================================
+        # 🛡️ 【人工智能第三道防线】：本地AI安全边界网关（强逻辑白名单+大模型语义审计）
+        # =====================================================================
+        from hash_chain import ai_content_security_audit
+        
+        # 将参数喂给咱们在 hash_chain.py 里写好的双引擎网关
+        is_safe, ai_reason = ai_content_security_audit(project_id, Sn, r)
+        
+        if not is_safe:
+            print(f"❌ [AI边界网关拦截] 选票内容包含漏洞投毒风险或敏感机密外泄特征！")
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": f"【AI内生安全拦截】您的选票数据触发违规风控！原因：{ai_reason}"
+                    }
+                ),
+                403,  # 返回标准拒绝状态码
+            )
         # 一切安全，批准入块存证
         success, msg = add_vote_to_chain(Sn, r, S_hex)
 

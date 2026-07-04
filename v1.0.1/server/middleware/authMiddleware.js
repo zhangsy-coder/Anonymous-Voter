@@ -23,8 +23,7 @@ const verifyToken = (req, res, next) => {
     try {
         // 4. 使用 JWT_SECRET 密钥对 Token 进行验签和解析
         // 如果 Token 被伪造、篡改，或超过了 24 小时有效期，此行会直接抛出异常
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
+        const decoded = jwt.verify(token, 'my_super_secret_key_12345');   // ← 和上面保持一致
         // 5. 【多项目架构核心透传】
         // 将解析出来的用户信息挂载到 req 对象上。
         // 此时的 decoded 对象内部包含：{ id, username, role, project_id, iat, exp }

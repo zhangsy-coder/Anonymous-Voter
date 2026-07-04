@@ -267,35 +267,53 @@
         /**
          * 🆕 新增项目环境初始化函数：合并获取项目状态与列表数据
          */
-        async function initProjectEnvironment() {
-            try {
-                // 1. 先向 Node.js 索要项目本身的详情状态（判断是否关闭）
-                const resProject = await fetchWithAuth(`/projects/list`);
-                const dataProject = await resProject.json();
+        
+        /**async function initProjectEnvironment() {
+    try {
+        // ====================================================================
+        // 🆕 第一步：主动校验当前管理员是否是该项目的创建者
+        // ====================================================================
+        const ownerCheck = await fetchWithAuth(`/projects/check_owner/${currentProjectId}`);
+        const ownerData = await ownerCheck.json();
 
-                if (dataProject.success) {
-                    // 从大盘列表中过滤出当前正在管理的项目对象
-                    const currentProj = dataProject.data.find(p => p.id == currentProjectId);
-                    if (currentProj) {
-                        document.getElementById('project-title').textContent = `📊 项目管理面板 ——【${currentProj.title}】`;
+        if (!ownerData.success || !ownerData.data.isOwner) {
+            alert('您不是该项目的创建者，无权管理！');
+            window.location.href = 'dashboard.html';
+            return;
+        }
 
-                        // 🚀【严谨闭环】：如果是已结束的项目 (status === 0)，执行只读上锁
-                        if (currentProj.status === 0) {
-                            isProjectClosed = true;
-                            lockDownUI();
-                        }
-                    }
+        // ====================================================================
+        // 第二步：正常获取项目信息（原有的逻辑）
+        // ====================================================================
+        const resProject = await fetchWithAuth(`/projects/list`);
+        const dataProject = await resProject.json();
+
+        if (dataProject.success) {
+            const currentProj = dataProject.data.find(p => p.id == currentProjectId);
+            if (currentProj) {
+                document.getElementById('project-title').textContent = `📊 项目管理面板 ——【${currentProj.title}】`;
+
+                if (currentProj.status === 0) {
+                    isProjectClosed = true;
+                    lockDownUI();
                 }
-
-                // 2. 正常拉取数据表格
-                loadCandidates();
-                loadVoters();
-            } catch (err) {
-                console.error("项目初始化异常:", err);
+            } else {
+                // 正常情况下不会走到这里，因为已经校验了创建者，但如果数据不一致则跳转
+                alert('项目数据异常，请重新选择');
+                window.location.href = 'dashboard.html';
+                return;
             }
         }
 
-        /**
+        // 第三步：加载数据表格
+        loadCandidates();
+        loadVoters();
+    } catch (err) {
+        console.error("项目初始化异常:", err);
+        alert('权限校验失败，请重新登录');
+        window.location.href = 'dashboard.html';
+    }
+}
          * 🆕 核心控制函数：将页面上的所有写操作全部冻结并对敏感列进行隐藏
          */
         function lockDownUI() {

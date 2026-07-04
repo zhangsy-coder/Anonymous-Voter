@@ -10,6 +10,8 @@ const app = express();
 // ============================================================================
 app.use(cors());         // 允许前端跨域访问 (CORS)，解决前后端分离时的端口不一致问题
 app.use(express.json()); // 内置 JSON 解析器，将前端发来的 JSON 数据自动转化为 req.body 对象
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../client')));
 
 // ============================================================================
 // 2. 导入具体的业务路由模块
