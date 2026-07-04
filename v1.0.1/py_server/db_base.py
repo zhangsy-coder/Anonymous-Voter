@@ -71,10 +71,67 @@ def create_all_tables():
     if not conn:
         return
 
+    
+    # 管理员主表
+    users = """
+    CREATE TABLE IF NOT EXISTS users (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        salt VARCHAR(64),
+        role ENUM('admin', 'voter') DEFAULT 'voter',
+        project_id INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+
+    #项目表（依赖 users 表）
+    projects = """
+    CREATE TABLE IF NOT EXISTS projects (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        title VARCHAR(200) NOT NULL,
+        description TEXT,
+        status INT DEFAULT 1,
+        created_by INT,
+        created_by_name VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+    
+    #候选人表 (级联隔离：项目删除时自动清理名下候选人)
+    candidates = """
+    CREATE TABLE IF NOT EXISTS candidates (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        project_id INT NOT NULL,
+        serial_no VARCHAR(20) NOT NULL,
+        name VARCHAR(50) NOT NULL,
+        vote_count INT DEFAULT 0,
+        status INT DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        UNIQUE KEY uk_proj_serial (project_id, serial_no)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """  
+    
+    #实名领票核销记录表
+    signature_logs = """
+    CREATE TABLE IF NOT EXISTS signature_logs (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        user_id INT NOT NULL,
+        project_id INT NOT NULL,
+        has_signed INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+    
     # 1. 投票主表
     sql_vote_main = """
     CREATE TABLE IF NOT EXISTS vote_main (
         id INT AUTO_INCREMENT PRIMARY KEY COMMENT '自增记录ID',
+        project_id INT,
         Sn VARCHAR(128) NOT NULL COMMENT '用户唯一随机凭证（防多投）',
         r VARCHAR(256) NOT NULL COMMENT '投票内容',
         S VARCHAR(512) NOT NULL COMMENT 'RSA签名值',
@@ -88,6 +145,7 @@ def create_all_tables():
     sql_hash_chain = """
     CREATE TABLE IF NOT EXISTS hash_chain (
         block_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '区块高度',
+        project_id INT,
         Sn VARCHAR(128) NOT NULL COMMENT '用户唯一凭证',
         r VARCHAR(256) NOT NULL COMMENT '投票内容',
         S VARCHAR(512) NOT NULL COMMENT '签名值',
@@ -102,6 +160,7 @@ def create_all_tables():
     sql_system_log = """
     CREATE TABLE IF NOT EXISTS system_log (
         log_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '日志ID',
+        project_id INT,
         opt_type VARCHAR(64) NOT NULL COMMENT '操作类型',
         opt_desc VARCHAR(512) NOT NULL COMMENT '操作详情',
         rel_sn VARCHAR(128) NULL COMMENT '关联用户Sn',
@@ -134,6 +193,10 @@ def create_all_tables():
     """
 
     try:
+        cur.execute(users)
+        cur.execute(projects)
+        cur.execute(candidates)
+        cur.execute(signature_logs)
         cur.execute(sql_vote_main)
         cur.execute(sql_hash_chain)
         cur.execute(sql_system_log)
