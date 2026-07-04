@@ -10,7 +10,7 @@ from pymysql import Error
 DB_CONFIG = {
     "host": "localhost",
     "user": "root",
-    "password": "123456",  # 请修改为自己的数据库密码
+    "password": "geshuai1234!",  # 请修改为自己的数据库密码
     "port": 3306,  # MySQL默认端口
     "database": "voting_system",  # 数据库名称，后续会自动创建
     "charset": "utf8mb4",  # 使用utf8mb4字符集支持更多字符（如表情符号）
@@ -121,12 +121,24 @@ def create_all_tables():
         update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='投票汇总统计表';
     """
+    # 5. AI安全边界防御拦截日志表 (信安竞赛专属扩展)
+    sql_ai_security_log = """
+    CREATE TABLE IF NOT EXISTS ai_security_log (
+        log_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '拦截记录ID',
+        project_id INT NOT NULL COMMENT '关联项目/租户ID',
+        attack_sn VARCHAR(128) NOT NULL COMMENT '黑客尝试使用的匿名凭证Sn',
+        malicious_r VARCHAR(512) NOT NULL COMMENT '被拦截的恶意/违规选票内容源码',
+        intercept_reason VARCHAR(1024) NOT NULL COMMENT 'AI安全官给出的深度语义审计拦截原因',
+        intercept_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '拦截防御发生时间'
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI安全边界防御拦截日志表';
+    """
 
     try:
         cur.execute(sql_vote_main)
         cur.execute(sql_hash_chain)
         cur.execute(sql_system_log)
         cur.execute(sql_vote_stat)
+        cur.execute(sql_ai_security_log)
         conn.commit()
         print("全部数据表创建成功或已存在")
     except Error as e:
