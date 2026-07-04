@@ -11,21 +11,65 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db'); // 引入 MySQL 数据库连接池
 
-/**
- * @route   POST /api/auth/login
- * @desc    多项目/多租户模式下的多维度登录接口
- * @access  公开访问
- */
+// ============================================================================
+// 🔐 JWT 密钥（与 authMiddleware.js 保持一致）
+// ============================================================================
+const JWT_SECRET = 'my_super_secret_key_12345';
+
+// ============================================================================
+// 📝 注册接口（开放注册，任何人都能成为管理员）
+// ============================================================================
+router.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+
+    // 1. 输入校验
+    if (!username || !password) {
+        return res.status(400).json({ success: false, message: '用户名和密码不能为空' });
+    }
+    if (password.length < 6) {
+        return res.status(400).json({ success: false, message: '密码长度不能少于6位' });
+    }
+
+    try {
+        // 2. 检查用户名是否已被占用
+        const [rows] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
+        if (rows.length > 0) {
+            return res.status(409).json({ success: false, message: '用户名已被注册' });
+        }
+
+        // 3. 加密密码
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // 4. 插入新用户，角色默认为 admin（可创建项目）
+        const [result] = await db.query(
+            'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+            [username, hashedPassword, 'admin']
+        );
+
+        console.log(`[注册成功] 新管理员: ${username}`);
+
+        res.status(201).json({
+            success: true,
+            message: '注册成功！请前往登录',
+            data: { id: result.insertId, username, role: 'admin' }
+        });
+
+    } catch (err) {
+        console.error('注册接口异常:', err);
+        res.status(500).json({ success: false, message: '服务器内部错误，注册失败' });
+    }
+});
+
+// ============================================================================
+// 🔑 登录接口
+// ============================================================================
 router.post('/login', async (req, res) => {
-    // 1. 🚀 [重写]: 从前端请求体中解构出四个核心参数（新增登录类型与项目ID）
     const { username, password, loginType, project_id } = req.body;
 
-    // 2. 基础数据非空校验
     if (!username || !password) {
         return res.status(400).json({ success: false, message: '账号和密码不能为空' });
     }
 
-    // 🚀 [核心业务校验]: 如果是选民通道登录，必须强制要求提供所选的项目 ID
     if (loginType === 'voter' && !project_id) {
         return res.status(400).json({ success: false, message: '登录失败：选民登录必须选择具体的投票项目' });
     }
@@ -33,17 +77,13 @@ router.post('/login', async (req, res) => {
     try {
         let users = [];
 
-        // 3. 🚀 [多租户核心流转]: 根据不同身份，执行不同的 SQL 查询策略
         if (loginType === 'admin') {
-            // 主办方策略：全局唯一，直接依靠用户名和角色锁定记录
             const [rows] = await db.query(
                 'SELECT * FROM users WHERE username = ? AND role = "admin"',
                 [username]
             );
             users = rows;
         } else {
-            // 选民策略：多租户隔离！利用 (project_id + username) 联合钥匙开门
-            // 这样不同项目下的相同用户名（如 project 1 的 user001 和 project 2 的 user001）就能精准区分
             const [rows] = await db.query(
                 'SELECT * FROM users WHERE username = ? AND project_id = ? AND role = "voter"',
                 [username, project_id]
@@ -51,37 +91,26 @@ router.post('/login', async (req, res) => {
             users = rows;
         }
 
-        // 4. 账号存在性校验（模糊提示，防止黑客暴力撞库枚举用户）
         if (users.length === 0) {
             return res.status(401).json({ success: false, message: '账号或密码错误' });
         }
 
-        // 提取出查询到的单条用户记录对象
         const user = users[0];
 
-        // 5. 密码哈希解密比对（安全比对盐值后的密文）
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(401).json({ success: false, message: '账号或密码错误' });
         }
 
-        // 6. 构建面向多租户隔离的 JWT 载荷 (Payload)
-        // 确保 project_id 被动态、准确地写入通行证碎片中
         const payload = {
             id: user.id,
             username: user.username,
             role: user.role,
-            project_id: user.project_id // 如果是 admin，这里会自动变为 null；如果是 voter，则是对应整数 ID
+            project_id: user.project_id
         };
 
-        // 7. 签发带多租户上下文的无状态身份令牌 (JWT Token)
-        const token = jwt.sign(
-            payload,
-            process.env.JWT_SECRET || 'your_fallback_secret', // 优先读取系统环境变量
-            { expiresIn: '24h' } // 令牌有效期 24 小时
-        );
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
 
-        // 8. 成功响应：将多租户上下文 Token 及流转字段打包返回给前端
         console.log(`[认证成功] 角色: ${user.role} | 账号: ${user.username} | 所属项目: ${user.project_id || '全局(主办方)'}`);
 
         res.json({
@@ -91,7 +120,7 @@ router.post('/login', async (req, res) => {
                 token: token,
                 role: user.role,
                 username: user.username,
-                project_id: user.project_id // 返回给前端，用于辅助前端执行无感知分流
+                project_id: user.project_id
             }
         });
 
