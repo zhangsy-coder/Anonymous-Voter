@@ -45,7 +45,7 @@ def create_genesis_block():
 
 
 # --------------------- 【核心3】创建新区块 + 自动串链！---------------------
-def add_vote_to_chain(Sn, r, S):
+def add_vote_to_chain(project_id, Sn, r, S):
     """
     投票上链（带防重复）
     """
@@ -66,11 +66,10 @@ def add_vote_to_chain(Sn, r, S):
 
     # 3. 插入数据库
     sql = """
-    INSERT INTO hash_chain (Sn, r, S, prev_hash, curr_hash)
-    VALUES (%s, %s, %s, %s, %s)
+    INSERT INTO hash_chain (project_id, Sn, r, S, prev_hash, curr_hash)
+    VALUES (%s, %s, %s, %s, %s, %s)
     """
-    return db_insert(sql, (Sn, r, S, new_prev_hash, new_curr_hash))
-
+    return db_insert(sql, (project_id, Sn, r, S, new_prev_hash, new_curr_hash))
 
 # --------------------- 【核心4】校验整条链（防篡改关键）---------------------
 def verify_blockchain():

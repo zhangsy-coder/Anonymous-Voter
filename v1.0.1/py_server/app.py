@@ -197,7 +197,7 @@ def cast_vote():
                 403,  # 返回标准拒绝状态码
             )
         # 一切安全，批准入块存证
-        success, msg = add_vote_to_chain(Sn, r, S_hex)
+        success, msg = add_vote_to_chain(project_id, Sn, r, S_hex)
 
         if success:
             # 🚀 终极修复：使用显式数据库连接，防范 NULL 值，并强制提交事务

@@ -8,9 +8,10 @@ from db_base import db_insert, db_query_all, db_update
 # ======================================================================
 
 
-def insert_vote(Sn, r, S, is_valid=1):
+def insert_vote(project_id, Sn, r, S, is_valid=1):
     """
     插入一条投票记录
+    :param project_id: 项目ID
     :param Sn: 用户唯一随机数（防多投）
     :param r: 投票内容
     :param S: RSA签名
@@ -18,10 +19,10 @@ def insert_vote(Sn, r, S, is_valid=1):
     :return: (True/False, 消息)
     """
     sql = """
-    INSERT INTO vote_main (Sn, r, S, is_valid)
-    VALUES (%s, %s, %s, %s)                          
+    INSERT INTO vote_main (project_id, Sn, r, S, is_valid)
+    VALUES (%s, %s, %s, %s, %s)                          
     """  # 注意：%s 是占位符，参数通过 db_insert 传入，防止SQL注入攻击
-    params = (Sn, r, S, is_valid)
+    params = (project_id, Sn, r, S, is_valid)
 
     success, row_id = db_insert(sql, params)
 
