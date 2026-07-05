@@ -249,7 +249,65 @@ def cast_vote():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
+@app.route("/python/cast_shadow_vote", methods=["POST"])
+def cast_shadow_vote():
+    """
+    影子投票接口（抗胁迫）：投票流程与 cast_vote 完全一致，但选票存入 shadow_votes 表，
+    不计入正式候选人的 vote_count，也不上哈希链。
+    """
+    try:
+        data = request.json
+        project_id = data.get("project_id")
+        r = data.get("r")
+        Sn = data.get("Sn")
+        S_hex = data.get("S")
 
+        if not all([project_id, r, Sn, S_hex]):
+            return jsonify({"success": False, "message": "选票凭证碎片不完整，已驳回"}), 400
+
+        print(f"\n📬 [影子投票] 收到项目 {project_id} 的胁迫选票！内容:【{r}】")
+
+        # 1. 验签（与正式票相同）
+        _, public_path = get_project_key_paths(project_id)
+        if not os.path.exists(public_path):
+            return jsonify({"success": False, "message": "该项目公钥丢失"}), 404
+
+        pub_key = load_public_key(public_path)
+        vote_hash = hashlib.sha256((r + Sn).encode("utf-8")).digest()
+        S_bytes = bytes.fromhex(S_hex)
+        if not verify_signature(pub_key, vote_hash, S_bytes):
+            print("❌ [影子安检] 密码学验签失败！")
+            return jsonify({"success": False, "message": "签名无效"}), 403
+
+        # 2. 防重复检查（可重用 check_sn_exists，但影子票允许 Sn 与正式票重复？建议影子票也独立防重，但不同表）
+        # 这里为了简单，我们只检查影子表中是否已有相同 Sn，避免胁迫者多次使用同一 Sn 重复投影子票
+        from db_base import db_query_all
+        existing = db_query_all("SELECT id FROM shadow_votes WHERE Sn = %s AND project_id = %s", (Sn, project_id))
+        if existing:
+            return jsonify({"success": False, "message": "该影子凭证已使用"}), 403
+
+        # 3. 获取投票者用户名（从请求体中额外传入，或者从 JWT 中获取，这里暂由前端传入）
+        # 前端在请求中加入 voter_username 字段，由 Node.js 网关传递，但我们这里直接从前端获取
+        voter_username = data.get("voter_username", "unknown")
+
+        # 4. 存入影子表
+        insert_sql = """
+            INSERT INTO shadow_votes (project_id, Sn, r, S, voter_username)
+            VALUES (%s, %s, %s, %s, %s)
+        """
+        from db_base import db_insert
+        success, _ = db_insert(insert_sql, (project_id, Sn, r, S_hex, voter_username))
+        if not success:
+            return jsonify({"success": False, "message": "影子投票入库失败"}), 500
+
+        print(f"🎉 [影子成功] 项目 {project_id} 的胁迫票已存入影子表（不计入真实结果）")
+        return jsonify({
+            "success": True,
+            "message": "投票成功！（您的选票已记录）"   # 与正式票保持相同文案
+        })
+    except Exception as e:
+        print(f"❌ 影子投票异常: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 # ====================================================================
 # 🚀 接口 5：【需求三新增】公开链上区块查询 (供前端密码学沙盒自检使用)
 # ====================================================================

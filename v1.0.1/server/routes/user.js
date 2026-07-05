@@ -31,7 +31,6 @@ const checkProjectOwner = async (req, res, next) => {
         if (project.length === 0) {
             return res.status(404).json({ success: false, message: '项目不存在' });
         }
-        // 🚀 修复潜在Bug：强制转换为字符串对比，防止 jwt 解码的数字与 DB 里的字符串对比失败
         if (String(project[0].created_by) !== String(adminId)) {
             return res.status(403).json({ success: false, message: '您不是该项目的创建者，无权操作' });
         }
@@ -41,9 +40,9 @@ const checkProjectOwner = async (req, res, next) => {
     }
 };
 
-/**
- * @route   GET /api/users/list
- */
+// ============================================================================
+// 【主办方接口】获取项目选民列表
+// ============================================================================
 router.get('/list', verifyToken, isAdmin, async (req, res) => {
     const { project_id } = req.query;
     const adminId = req.user.id;
@@ -61,7 +60,7 @@ router.get('/list', verifyToken, isAdmin, async (req, res) => {
         }
 
         const [users] = await db.query(
-            'SELECT id, username, role, project_id, created_at FROM users WHERE project_id = ? AND role = "voter" ORDER BY created_at DESC',
+            'SELECT id, username, role, project_id, created_at, duress_enabled FROM users WHERE project_id = ? AND role = "voter" ORDER BY created_at DESC',
             [project_id]
         );
 
@@ -72,9 +71,9 @@ router.get('/list', verifyToken, isAdmin, async (req, res) => {
     }
 });
 
-/**
- * @route   POST /api/users/import
- */
+// ============================================================================
+// 【主办方接口】批量导入选民（支持胁迫密码）
+// ============================================================================
 router.post('/import', verifyToken, isAdmin, checkProjectOwner, async (req, res) => {
     const { project_id, voters } = req.body;
 
@@ -84,13 +83,13 @@ router.post('/import', verifyToken, isAdmin, checkProjectOwner, async (req, res)
 
     try {
         const salt = await bcrypt.genSalt(10);
-
         let successCount = 0;
         let failList = [];
 
         for (const voter of voters) {
             const username = voter.username ? String(voter.username).trim() : '';
             const password = voter.password ? String(voter.password).trim() : '';
+            const duressPassword = voter.duress_password ? String(voter.duress_password).trim() : '';
 
             if (!username || !password) {
                 failList.push({ username: username || '空账号', reason: '账号或密码不能为空' });
@@ -103,21 +102,31 @@ router.post('/import', verifyToken, isAdmin, checkProjectOwner, async (req, res)
 
             try {
                 const hashedPassword = await bcrypt.hash(password, salt);
+                let hashedDuress = null;
+                let duressEnabled = 0;
+
+                // 如果提供了胁迫密码，加密并启用
+                if (duressPassword && duressPassword.length >= 6) {
+                    hashedDuress = await bcrypt.hash(duressPassword, salt);
+                    duressEnabled = 1;
+                }
+
                 await db.query(
-                    'INSERT INTO users (username, password, role, project_id) VALUES (?, ?, "voter", ?)',
-                    [username, hashedPassword, project_id]
+                    `INSERT INTO users 
+                    (username, password, role, project_id, password_duress, duress_enabled) 
+                    VALUES (?, ?, 'voter', ?, ?, ?)`,
+                    [username, hashedPassword, project_id, hashedDuress, duressEnabled]
                 );
                 successCount++;
             } catch (err) {
                 if (err.code === 'ER_DUP_ENTRY') {
-                    failList.push({ username, reason: '该账号名称在系统中已被占用(违反全局唯一限制)' });
+                    failList.push({ username, reason: '该账号名称在系统中已被占用' });
                 } else {
                     failList.push({ username, reason: '数据库写入异常: ' + err.message });
                 }
             }
         }
 
-        // 🚀 核心修复：如果全军覆没或部分失败，必须返回 success: false 强制让前端弹窗报错！
         if (successCount === 0) {
             return res.json({
                 success: false,
@@ -125,12 +134,11 @@ router.post('/import', verifyToken, isAdmin, checkProjectOwner, async (req, res)
             });
         } else if (failList.length > 0) {
             return res.json({
-                success: false, // 强制前端报警
+                success: false,
                 message: `导入部分完成。成功 ${successCount} 条，失败 ${failList.length} 条。\n失败原因示例：[${failList[0].username}] ${failList[0].reason}。\n请在输入框剔除已成功的行后重试！`
             });
         }
 
-        // 全部成功才返回 true
         res.json({
             success: true,
             message: `批量录入执行完毕。完美成功: ${successCount} 条。`,
@@ -143,9 +151,9 @@ router.post('/import', verifyToken, isAdmin, checkProjectOwner, async (req, res)
     }
 });
 
-/**
- * @route   DELETE /api/users/delete/:id
- */
+// ============================================================================
+// 【主办方接口】删除选民账号
+// ============================================================================
 router.delete('/delete/:id', verifyToken, isAdmin, async (req, res) => {
     const userId = req.params.id;
     const adminId = req.user.id;
@@ -160,7 +168,6 @@ router.delete('/delete/:id', verifyToken, isAdmin, async (req, res) => {
 
         const [project] = await db.query('SELECT created_by FROM projects WHERE id = ?', [user[0].project_id]);
 
-        // 🚀 修复隐式类型转换问题
         if (project.length === 0 || String(project[0].created_by) !== String(adminId)) {
             return res.status(403).json({ success: false, message: '您不是该项目的创建者，无权删除' });
         }

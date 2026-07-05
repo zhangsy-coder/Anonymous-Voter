@@ -209,6 +209,8 @@
                     localStorage.setItem('role', data.data.role);
                     localStorage.setItem('username', data.data.username);
                     localStorage.setItem('project_id', data.data.project_id || '');
+                    // 🆕 保存胁迫标记
+                    localStorage.setItem('is_duress', data.data.is_duress || false);
 
                     // 根据角色进行路由分流
                     if (data.data.role === 'admin') {

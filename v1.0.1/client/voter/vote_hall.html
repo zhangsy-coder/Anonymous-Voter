@@ -115,6 +115,23 @@
         .log-error {
             color: #f44336;
         }
+
+        /* 胁迫模式提示条 */
+        .duress-banner {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .duress-banner strong {
+            color: #dc3545;
+        }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js"></script>
@@ -132,6 +149,12 @@
     </nav>
     <div class="container">
         <h1>🗳️ 区块链匿名投票大厅</h1>
+
+        <!-- 🆕 胁迫模式提示条 -->
+        <div class="duress-banner" id="duressBanner">
+            ⚠️ <strong>胁迫模式已激活</strong> — 您的选票将被记录但 <strong>不计入最终结果</strong>，您看到的界面与正常模式完全一致。
+        </div>
+
         <div class="info-alert">
             <strong>🔒 安全保障提示：</strong> 本系统采用 Textbook RSA 盲签名技术。您的选票将在本地被数学“遮掩”，主办方只能为您签名但无法知晓您投给谁。投票投递时，系统将自动抹除您的身份信息。
         </div>
@@ -160,6 +183,7 @@
         const PYTHON_SERVER_URL = window.APP_CONFIG.PY_API;
 
         const consoleDiv = document.getElementById('cryptoConsole');
+        const duressBanner = document.getElementById('duressBanner');
 
         // 日志打印辅助函数
         function logToConsole(message, type = 'step') {
@@ -179,6 +203,13 @@
                 alert("未检测到您的投票项目信息，说明身份凭证不完整，请重新登录！");
                 window.location.href = '../login.html';
                 return;
+            }
+
+            // 🆕 检测胁迫模式，显示提示条
+            const isDuress = AuthUtils.getIsDuress();
+            if (isDuress) {
+                duressBanner.style.display = 'block';
+                console.log("⚠️ [胁迫模式] 当前用户以胁迫密码登录，投票将不计入真实结果");
             }
 
             try {
@@ -271,21 +302,35 @@
 
                 logToConsole(`4. [安全机制] 正在从浏览器彻底抹除实名 JWT Token，切断身份关联！`, 'warn');
 
-                // 【硬核操作】：彻底清理身份痕迹
+                // 【关键修复】先读取 isDuress，再清除身份
+                const isDuress = localStorage.getItem('is_duress') === 'true';
+                console.log('isDuress (直读):', isDuress);
+                const castEndpoint = isDuress ? '/python/cast_shadow_vote' : '/python/cast_vote';
+                console.log('castEndpoint:', castEndpoint);
+
+                // 现在清除身份（已经读取了 is_duress）
                 AuthUtils.clearAuth();
 
                 logToConsole(`5. [网络请求] 以完全匿名状态，直接向 Python 区块链网络广播选票...`);
 
-                // 直接请求 Python 时，也要告知是哪个项目的票，以便 Python 使用对应的公钥验签
-                const pyResponse = await fetch(`${PYTHON_SERVER_URL}/python/cast_vote`, {
+                // 🆕 构造请求体（影子投票需要传递 voter_username 用于审计）
+                const requestBody = {
+                    project_id: CURRENT_PROJECT_ID,
+                    r: finalVote.r,
+                    Sn: finalVote.Sn,
+                    S: finalVote.S
+                };
+
+                // 如果是影子投票，添加 voter_username
+                if (isDuress) {
+                    requestBody.voter_username = AuthUtils.getUsername() || 'unknown';
+                    logToConsole(`[影子模式] 投票者: ${requestBody.voter_username}（仅用于审计，不计入结果）`, 'warn');
+                }
+
+                const pyResponse = await fetch(`${PYTHON_SERVER_URL}${castEndpoint}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        project_id: CURRENT_PROJECT_ID,
-                        r: finalVote.r,
-                        Sn: finalVote.Sn,
-                        S: finalVote.S
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const pyData = await pyResponse.json();
@@ -294,17 +339,15 @@
                 }
 
                 // ===================================================================
-                // 🎉 完美闭环：处理成功后的 UI 逻辑 (修复自动跳转问题)
+                // 🎉 完美闭环：处理成功后的 UI 逻辑
                 // ===================================================================
-                // ===================================================================
-                // 🎉 完美闭环：处理成功后的 UI 逻辑 (展示终极密码学回执单)
-                // ===================================================================
+                // 注意：影子投票和正式投票使用相同的成功文案（胁迫者无法区分）
                 logToConsole(`🎉 [交易确认] ${pyData.message}`);
                 logToConsole(`✔️ 协议执行完毕。您的选票已被永久存证，且无人知晓您的身份！`);
 
                 voteBtn.style.display = 'none'; // 隐藏投票按钮
 
-                // 🚀 新增：在页面上渲染出极其醒目的“防篡改回执单”
+                // 🚀 在页面上渲染“防篡改回执单”（影子票也显示相同回执，胁迫者看不出差异）
                 const receiptDiv = document.createElement('div');
                 receiptDiv.innerHTML = `
                     <div style="background-color: #fff3cd; border: 2px dashed #ffc107; padding: 25px; margin-top: 30px; border-radius: 8px; color: #856404; text-align: left; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
@@ -326,6 +369,10 @@
                 document.querySelector('.container').insertBefore(receiptDiv, consoleDiv);
 
                 alert("✅ 投票成功上链！\n\n请不要立刻关闭页面！请务必查阅并保存页面下方出现的【黄色选票凭证单】，这是您防篡改查验的唯一依据。");
+
+                // 🆕 投票完成后清除胁迫标记（防止用户返回时仍处于胁迫状态）
+                localStorage.removeItem('is_duress');
+
             } catch (error) {
                 logToConsole(error.message, 'error');
                 alert(`投票失败: ${error.message}`);

@@ -8,6 +8,7 @@
     <script src="../js/auth.js"></script>
     <title>项目深度管理 - SaaS 投票平台</title>
     <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/auth.js"></script>
 
     <style>
         body {
@@ -16,6 +17,7 @@
             background-color: #f4f7f6;
         }
 
+        /* 顶部导航 */
         .admin-navbar {
             width: 100%;
             background-color: #2c3e50;
@@ -81,6 +83,7 @@
             color: #333;
         }
 
+        /* 批量导入文本域 */
         .import-area {
             width: 100%;
             height: 120px;
@@ -93,6 +96,7 @@
             background-color: #f8fbff;
         }
 
+        /* 后台数据表格微调 */
         .admin-table-container {
             max-height: 400px;
             overflow-y: auto;
@@ -113,6 +117,7 @@
             font-size: 12px;
         }
 
+        /* 🆕 新增：顶部结算条样式 */
         .settle-bar {
             background-color: #fff3cd;
             color: #856404;
@@ -126,6 +131,7 @@
             font-size: 14px;
         }
 
+        /* 🆕 新增：项目已关闭时的全局只读水印提示 */
         .archive-badge {
             background-color: #e2e3e5;
             color: #383d41;
@@ -200,8 +206,9 @@
 
                 <div class="write-zone">
                     <p style="font-size: 13px; color: #666; margin-top: 0;">
-                        批量导入格式：<strong>账号,密码</strong> (密码至少6位，每行一个)。例如：<br>
-                        user001,123456<br>user002,123456
+                        批量导入格式：<strong>账号,密码,胁迫密码</strong> (胁迫密码可选，每行一个)。例如：<br>
+                        user001,123456,999999<br>
+                        user002,123456
                     </p>
                     <textarea id="voter-input" class="import-area" placeholder="在此处粘贴投票者名单..."></textarea>
                     <button id="importVoterBtn" onclick="importVoters()"
@@ -258,7 +265,6 @@
 
         /**
          * 🆕 新增项目环境初始化函数：合并获取项目状态与列表数据
-         * 【修复点】：去除了前面多余的块级注释符号，让函数正常生效！
          */
         async function initProjectEnvironment() {
             try {
@@ -275,7 +281,7 @@
                 }
 
                 // ====================================================================
-                // 第二步：正常获取项目信息
+                // 第二步：正常获取项目信息（原有的逻辑）
                 // ====================================================================
                 const resProject = await fetchWithAuth(`/projects/list`);
                 const dataProject = await resProject.json();
@@ -290,13 +296,14 @@
                             lockDownUI();
                         }
                     } else {
+                        // 正常情况下不会走到这里，因为已经校验了创建者，但如果数据不一致则跳转
                         alert('项目数据异常，请重新选择');
                         window.location.href = 'dashboard.html';
                         return;
                     }
                 }
 
-                // 第三步：加载数据表格 (由于修复了注释，现在一进页面就会拉取数据了！)
+                // 第三步：加载数据表格
                 loadCandidates();
                 loadVoters();
             } catch (err) {
@@ -305,26 +312,32 @@
                 window.location.href = 'dashboard.html';
             }
         }
-
         /**
          * 🆕 核心控制函数：将页面上的所有写操作全部冻结并对敏感列进行隐藏
          */
         function lockDownUI() {
+            // 1. 显示顶部黄色上锁提示条
             document.getElementById('statusInfoBar').style.display = 'flex';
+            // 2. 隐藏并撤销顶部的“结算并关闭活动”按钮
             document.getElementById('endProjectBtn').style.display = 'none';
+
+            // 3. 隐藏左侧和右侧的批量文本域输入区
             document.querySelectorAll('.write-zone').forEach(zone => {
                 zone.style.display = 'none';
             });
+
+            // 4. 注意：由于表格是后续动态异步渲染的，删除按钮的拦截将放在渲染函数内部执行！
         }
 
         // ====================================================================
-        // 2. 一键计票结算、导出报表、全系统上锁
+        // 2. 🆕 核心函数：一键计票结算、导出报表、全系统上锁
         // ====================================================================
         async function endAndExportProject() {
-            const doubleCheck = confirm("🚨 计票结算与归档确认 🚨\n\n您确定要现在切断选民的投票通道吗？");
+            const doubleCheck = confirm("🚨 计票结算与归档确认 🚨\n\n您正在执行关闭投票通道的操作。该操作会产生以下连锁反应：\n1. 系统将自动向底层 MySQL 发送结账状态锁，所有未投票的选民账号将永远作废，禁止再投递选票。\n2. 系统会同步将最终计票结果导出为标准的 CSV 报表供您下载存档。\n\n您确定要现在切断选民的投票通道吗？");
             if (!doubleCheck) return;
 
             try {
+                // 🚀 2.1 向 Node.js 后端发起更新状态的请求，将 projects 表中的 status 设为 0
                 const response = await fetchWithAuth(`/projects/end/${currentProjectId}`, {
                     method: 'POST'
                 });
@@ -334,8 +347,12 @@
                     throw new Error(result.message || "后端网关拒绝了关停状态更新");
                 }
 
+                // 🚀 2.2 纯前端流式汇聚表格里的真实数据生成 CSV
                 exportTableToCSV();
-                alert("🎉 结算成功！\n\n1. 最终选举排行报表已成功下载。\n2. 系统已自动转换为只读审计模式。");
+
+                alert("🎉 结算成功！\n\n1. 最终选举排行报表已成功下载。\n2. 该项目在区块链与关系型数据库中已正式封盘归档，系统已自动转换为只读审计模式。");
+
+                // 🚀 2.3 刷新本页面，触发 lockDownUI 机制，实现就地冰封
                 window.location.reload();
 
             } catch (err) {
@@ -344,7 +361,7 @@
         }
 
         /**
-         * 纯前端高效拼装 CSV 报表
+         * 🆕 纯前端高效拼装 CSV 报表并触发 Blob 浏览器高速下载
          */
         function exportTableToCSV() {
             const rows = document.querySelectorAll("#candidate-tbody tr");
@@ -353,6 +370,7 @@
                 return;
             }
 
+            // 组装 CSV 头，加入 \ufeff 是为了让 Windows 系统的 Excel 打开时自动识别 UTF-8，杜绝中文乱码
             let csvContent = "\ufeff排名序号,候选人姓名,最终得票总数\n";
 
             rows.forEach(tr => {
@@ -365,6 +383,7 @@
                 }
             });
 
+            // 转为二进制文件流
             const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
@@ -379,7 +398,7 @@
         }
 
         // ====================================================================
-        // 3. 批量文本解析与多租户安全导入引擎
+        // 3. 批量文本解析与多租户安全导入引擎 (保持原样并增强健壮性)
         // ====================================================================
         function parseInputData(rawText, keys) {
             const lines = rawText.split('\n');
@@ -418,12 +437,30 @@
             }
         }
 
+        // 在 project_manage.html 的 script 标签中找到 importVoters 函数，替换为：
         async function importVoters() {
             const rawText = document.getElementById('voter-input').value;
-            const voters = parseInputData(rawText, ['username', 'password']);
+            // 解析格式：账号,密码,胁迫密码（胁迫密码可选）
+            const lines = rawText.split('\n');
+            const voters = [];
+            for (let line of lines) {
+                line = line.trim();
+                if (!line) continue;
+                const parts = line.split(/[，,]/);
+                if (parts.length >= 2) {
+                    let voter = {
+                        username: parts[0].trim(),
+                        password: parts[1].trim()
+                    };
+                    if (parts.length >= 3 && parts[2].trim()) {
+                        voter.duress_password = parts[2].trim();
+                    }
+                    voters.push(voter);
+                }
+            }
 
             if (voters.length === 0) return alert('格式错误：系统未能解析到有效的选民数据！');
-            if (!confirm(`准备为当前项目批量生成 ${voters.length} 个专属通信证，确定吗？`)) return;
+            if (!confirm(`准备为当前项目批量生成 ${voters.length} 个专属通行证，确定吗？`)) return;
 
             const res = await fetchWithAuth('/users/import', {
                 method: 'POST',
@@ -448,14 +485,18 @@
         async function loadCandidates() {
             const tbody = document.getElementById('candidate-tbody');
             try {
+                // 🚀 核心修复点：上一步我们已经让 Node.js 在此接口的 SQL 里补齐了 serial_no 字段！
                 const res = await fetchWithAuth(`/candidates/admin/list?project_id=${currentProjectId}`);
                 const data = await res.json();
 
                 if (data.success) {
                     tbody.innerHTML = data.data.length === 0 ? '<tr><td colspan="4">暂无数据，请在上方批量录入</td></tr>' : '';
+
+                    // 按照得票由高到低进行前端二次排序展示
                     data.data.sort((a, b) => b.vote_count - a.vote_count);
 
                     data.data.forEach(c => {
+                        // 🚀【严谨闭环】：如果项目已锁定，则不渲染红色的物理“删除”按钮
                         const deleteBtnHtml = isProjectClosed
                             ? `<span style="color:#999; font-size:12px;">不可修改</span>`
                             : `<button class="btn-danger btn-sm" onclick="deleteCandidate(${c.id})">物理删除</button>`;
@@ -470,6 +511,7 @@
                         `;
                     });
 
+                    // 只读模式下，彻底抹除表格中的操作列标题
                     if (isProjectClosed) {
                         document.querySelectorAll(".action-column").forEach(el => el.style.display = 'none');
                         document.querySelectorAll(".action-td").forEach(el => el.style.display = 'none');
@@ -487,6 +529,7 @@
                 if (data.success) {
                     tbody.innerHTML = data.data.length === 0 ? '<tr><td colspan="3">暂无数据，请在上方批量录入</td></tr>' : '';
                     data.data.forEach(v => {
+                        // 🚀【严谨闭环】：如果项目已锁定，禁止注销账号
                         const actionBtnHtml = isProjectClosed
                             ? `<span style="color:#999; font-size:12px;">已锁定</span>`
                             : `<button class="btn-danger btn-sm" onclick="deleteVoter(${v.id})">作废账号</button>`;

@@ -72,7 +72,7 @@ def create_all_tables():
     if not conn:
         return
 
-    # 🚀 核心改造 1：多租户用户表 (取消全局UNIQUE，改为联合UNIQUE)
+    # 🚀 核心改造 1：多租户用户表 (增加胁迫密码字段)
     users = """
     CREATE TABLE IF NOT EXISTS users (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -81,6 +81,8 @@ def create_all_tables():
         salt VARCHAR(64),
         role ENUM('admin', 'voter') DEFAULT 'voter' COMMENT '角色身份',
         project_id INT COMMENT '租户/项目ID（隔离关键）',
+        password_duress VARCHAR(255) NULL COMMENT '胁迫密码（bcrypt哈希）',
+        duress_enabled TINYINT(1) DEFAULT 0 COMMENT '是否启用胁迫密码',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uk_project_username (project_id, username) COMMENT '联合唯一：限制同一项目内账号不得重复'
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统全局多租户用户表';
@@ -193,6 +195,20 @@ def create_all_tables():
         intercept_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '拦截防御发生时间'
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI安全边界防御拦截日志表';
     """
+    # 6. 影子投票表（抗胁迫）
+    sql_shadow_votes = """
+    CREATE TABLE IF NOT EXISTS shadow_votes (
+        id INT AUTO_INCREMENT PRIMARY KEY COMMENT '影子票ID',
+        project_id INT NOT NULL COMMENT '关联项目ID',
+        Sn VARCHAR(128) NOT NULL COMMENT '用户凭证',
+        r VARCHAR(256) NOT NULL COMMENT '投票内容',
+        S VARCHAR(512) NOT NULL COMMENT 'RSA签名',
+        voter_username VARCHAR(50) NOT NULL COMMENT '投票者用户名（用于审计）',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '投票时间',
+        INDEX idx_project (project_id),
+        INDEX idx_voter (voter_username)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='胁迫影子投票表（不计入真实结果）';
+    """
 
     try:
         cur.execute(users)
@@ -204,6 +220,7 @@ def create_all_tables():
         cur.execute(sql_system_log)
         cur.execute(sql_vote_stat)
         cur.execute(sql_ai_security_log)
+        cur.execute(sql_shadow_votes)
         conn.commit()
         print("SaaS多租户升级完毕：全部数据表创建成功或已存在")
     except Error as e:

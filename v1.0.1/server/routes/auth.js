@@ -9,7 +9,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const db = require('../config/db'); // 引入 MySQL 数据库连接池
+const db = require('../config/db');
 
 // ============================================================================
 // 🔐 JWT 密钥（与 authMiddleware.js 保持一致）
@@ -17,7 +17,7 @@ const db = require('../config/db'); // 引入 MySQL 数据库连接池
 const JWT_SECRET = 'my_super_secret_key_12345';
 
 // ============================================================================
-// 📝 注册接口（开放注册，任何人都能成为管理员）
+// 📝 注册接口（仅限管理员注册，不涉及胁迫密码）
 // ============================================================================
 router.post('/register', async (req, res) => {
     const { username, password } = req.body;
@@ -30,7 +30,6 @@ router.post('/register', async (req, res) => {
     }
 
     try {
-        // 🚀 核心修改点：防止全局扫描，仅检查主办方(admin)中是否已存在该账号
         const [rows] = await db.query('SELECT * FROM users WHERE username = ? AND role = "admin"', [username]);
         if (rows.length > 0) {
             return res.status(409).json({ success: false, message: '该主办方账号名称已被注册' });
@@ -38,10 +37,9 @@ router.post('/register', async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 插入新用户，角色为 admin，project_id 默认为 NULL（因为主办方管理全局项目）
         const [result] = await db.query(
-            'INSERT INTO users (username, password, role, project_id) VALUES (?, ?, ?, NULL)',
-            [username, hashedPassword, 'admin']
+            'INSERT INTO users (username, password, role, project_id) VALUES (?, ?, "admin", NULL)',
+            [username, hashedPassword]
         );
 
         console.log(`[注册成功] 新管理员: ${username}`);
@@ -59,7 +57,7 @@ router.post('/register', async (req, res) => {
 });
 
 // ============================================================================
-// 🔑 登录接口
+// 🔑 登录接口（支持选民胁迫密码登录）
 // ============================================================================
 router.post('/login', async (req, res) => {
     const { username, password, loginType, project_id } = req.body;
@@ -76,14 +74,12 @@ router.post('/login', async (req, res) => {
         let users = [];
 
         if (loginType === 'admin') {
-            // 主办方独立登录通道
             const [rows] = await db.query(
                 'SELECT * FROM users WHERE username = ? AND role = "admin"',
                 [username]
             );
             users = rows;
         } else {
-            // 🚀 SaaS 租户隔离查询通道（精确定位某一个项目下的某一个选民）
             const [rows] = await db.query(
                 'SELECT * FROM users WHERE username = ? AND project_id = ? AND role = "voter"',
                 [username, project_id]
@@ -97,8 +93,16 @@ router.post('/login', async (req, res) => {
 
         const user = users[0];
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
+        // 检查普通密码
+        const isNormalMatch = await bcrypt.compare(password, user.password);
+        let isDuress = false;
+
+        // 如果普通密码不匹配，尝试胁迫密码
+        if (!isNormalMatch && user.duress_enabled && user.password_duress) {
+            isDuress = await bcrypt.compare(password, user.password_duress);
+        }
+
+        if (!isNormalMatch && !isDuress) {
             return res.status(401).json({ success: false, message: '账号或密码错误' });
         }
 
@@ -106,12 +110,13 @@ router.post('/login', async (req, res) => {
             id: user.id,
             username: user.username,
             role: user.role,
-            project_id: user.project_id
+            project_id: user.project_id,
+            is_duress: isDuress
         };
 
         const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
 
-        console.log(`[认证成功] 角色: ${user.role} | 账号: ${user.username} | 所属项目: ${user.project_id || '全局(主办方)'}`);
+        console.log(`[认证成功] 角色: ${user.role} | 账号: ${user.username} | ${isDuress ? '⚠️ 胁迫模式' : '正常模式'}`);
 
         res.json({
             success: true,
@@ -120,7 +125,8 @@ router.post('/login', async (req, res) => {
                 token: token,
                 role: user.role,
                 username: user.username,
-                project_id: user.project_id
+                project_id: user.project_id,
+                is_duress: isDuress
             }
         });
 
