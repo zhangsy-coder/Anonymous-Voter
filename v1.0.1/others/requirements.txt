@@ -2,3 +2,5 @@ pymysql
 cryptography
 flask
 flask-cors
+scikit-learn
+numpy
