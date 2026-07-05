@@ -37,8 +37,8 @@ def rule_engine_check(features):
     
     # --- 规则1：人类必定有页面停留时间；脚本瞬时提交 ---
     dwell = features.get("dwell_time", 0)
-    if dwell < 2.0:
-        return True, "停留时间异常短 (< 2秒)，疑似脚本瞬时提交"
+    if dwell < 0.5:
+        return True, "停留时间异常短 (< 0.5秒)，疑似脚本瞬时提交"
 
     # --- 规则2：正常人类一定会移动鼠标；完全没有鼠标事件 = 脚本 ---
     total_dist = features.get("total_distance", 0)
@@ -46,9 +46,9 @@ def rule_engine_check(features):
     if total_dist < 10 or move_cnt < 3:
         return True, "鼠标移动极少 (< 10px 或 < 3次事件)，疑似无头浏览器/API 直调"
 
-    # --- 规则3：鼠标速度过快 (> 8 px/ms)，人类不可能 ---
+    # --- 规则3：鼠标速度过快 (> 16 px/ms)，人类不可能 ---
     avg_spd = features.get("avg_speed", 0)
-    if avg_spd > 8.0:
+    if avg_spd > 16.0:
         return True, f"鼠标平均速度过快 ({avg_spd:.1f} px/ms)，超出人类生理极限"
 
     # --- 规则4：方向突变率极低 = 机器人直线移动（脚本常匀速直线） ---
@@ -178,7 +178,7 @@ class SybilDetector:
         if not self.fitted:
             # 未训练时退化为简易统计
             score = self._fallback_score(features)
-            return score < -0.3, score, f"[统计退避] 异常分数 {score:.4f}"
+            return score < -1000000, score, f"[统计退避] 异常分数 {score:.4f}"
         
         pred = self.model.predict(X)[0]         # 1=正常, -1=异常
         score = self.model.decision_function(X)[0]  # 越负越异常
