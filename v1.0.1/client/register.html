@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="./js/config.js"></script>
     <title>注册 - 投票平台</title>
     <link rel="stylesheet" href="./css/style.css">
     <style>
@@ -150,7 +151,7 @@
             }
 
             try {
-                const res = await fetch('http://127.0.0.1:3000/api/auth/register', {
+                const res = await fetch(`${window.APP_CONFIG.NODE_API}/api/auth/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
