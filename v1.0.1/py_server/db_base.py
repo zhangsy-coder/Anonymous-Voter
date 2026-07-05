@@ -11,7 +11,7 @@ from pymysql import Error
 DB_CONFIG = {
     "host": "localhost",
     "user": "root",
-    "password": "geshuai1234!",  # 请修改为自己的数据库密码
+    "password": "123456",  # 请修改为自己的数据库密码
     "port": 3306,  # MySQL默认端口
     "database": "voting_system",  # 数据库名称，后续会自动创建
     "charset": "utf8mb4",  # 使用utf8mb4字符集支持更多字符（如表情符号）
