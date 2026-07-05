@@ -302,29 +302,37 @@
 
                 logToConsole(`4. [安全机制] 正在从浏览器彻底抹除实名 JWT Token，切断身份关联！`, 'warn');
 
+                // 🔥 关键修复：在清除身份之前保存用户名（影子投票审计用）
+                const voterUsername = AuthUtils.getUsername() || 'unknown';
+
                 // 【关键修复】先读取 isDuress，再清除身份
                 const isDuress = localStorage.getItem('is_duress') === 'true';
                 console.log('isDuress (直读):', isDuress);
                 const castEndpoint = isDuress ? '/python/cast_shadow_vote' : '/python/cast_vote';
                 console.log('castEndpoint:', castEndpoint);
 
-                // 现在清除身份（已经读取了 is_duress）
+                // 现在清除身份（已经读取了 is_duress 并保存了用户名）
                 AuthUtils.clearAuth();
 
                 logToConsole(`5. [网络请求] 以完全匿名状态，直接向 Python 区块链网络广播选票...`);
+
+                // 🛡️ 采集前端行为特征数据（匿名，不包含身份信息）
+                const behaviorFeatures = window.getBehaviorFeatures ? window.getBehaviorFeatures() : [];
+                logToConsole(`[行为采集] 已捕获 ${behaviorFeatures.length} 维匿名行为特征向量，即将随选票上链...`);
 
                 // 🆕 构造请求体（影子投票需要传递 voter_username 用于审计）
                 const requestBody = {
                     project_id: CURRENT_PROJECT_ID,
                     r: finalVote.r,
                     Sn: finalVote.Sn,
-                    S: finalVote.S
+                    S: finalVote.S,
+                    behavior_features: behaviorFeatures   // 追加行为特征
                 };
 
-                // 如果是影子投票，添加 voter_username
+                // 如果是影子投票，添加 voter_username（使用提前保存的变量，确保不为空）
                 if (isDuress) {
-                    requestBody.voter_username = AuthUtils.getUsername() || 'unknown';
-                    logToConsole(`[影子模式] 投票者: ${requestBody.voter_username}（仅用于审计，不计入结果）`, 'warn');
+                    requestBody.voter_username = voterUsername;  // ✅ 直接使用保存的值
+                    logToConsole(`[影子模式] 投票者: ${voterUsername}（仅用于审计，不计入结果）`, 'warn');
                 }
 
                 const pyResponse = await fetch(`${PYTHON_SERVER_URL}${castEndpoint}`, {
@@ -350,20 +358,20 @@
                 // 🚀 在页面上渲染“防篡改回执单”（影子票也显示相同回执，胁迫者看不出差异）
                 const receiptDiv = document.createElement('div');
                 receiptDiv.innerHTML = `
-                    <div style="background-color: #fff3cd; border: 2px dashed #ffc107; padding: 25px; margin-top: 30px; border-radius: 8px; color: #856404; text-align: left; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-                        <h2 style="margin-top: 0; color: #d39e00; border-bottom: 1px solid #ffeeba; padding-bottom: 10px;">⚠️ 极其重要：请立刻保存您的选票凭证！</h2>
-                        <p style="font-size: 15px; line-height: 1.6;">为了保证绝对的零知识匿名，系统现已<strong>彻底销毁您的实名绑定信息</strong>。如果您未来想在公示大盘验证自己的选票是否被后台篡改，<strong>必须</strong>依靠以下三个数据进行密码学核算。</p>
-                        <p style="color: #dc3545; font-weight: bold; font-size: 14px;">一旦关闭此页面，全宇宙将没有任何人能帮您找回这组凭证！请立刻拍照或复制保存：</p>
-                        
-                        <div style="background: #ffffff; padding: 15px; border-radius: 6px; font-family: 'Courier New', Courier, monospace; font-size: 14px; border: 1px solid #ffeeba; margin-top: 15px;">
-                            <div style="margin-bottom: 10px;"><strong>1. 秘密凭证 (Secret Sn)</strong>: <span style="color: #1a73e8; font-weight: bold; font-size: 16px;">${finalVote.Sn}</span></div>
-                            <div style="margin-bottom: 10px;"><strong>2. 投递选项 (Chosen r)</strong>: <span style="color: #28a745; font-weight: bold; font-size: 16px;">${finalVote.r}</span></div>
-                            <div><strong>3. 真实签名 (RSA S)</strong>: <br><span style="word-break: break-all; font-size: 12px; color: #666;">${finalVote.S}</span></div>
-                        </div>
+            <div style="background-color: #fff3cd; border: 2px dashed #ffc107; padding: 25px; margin-top: 30px; border-radius: 8px; color: #856404; text-align: left; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                <h2 style="margin-top: 0; color: #d39e00; border-bottom: 1px solid #ffeeba; padding-bottom: 10px;">⚠️ 极其重要：请立刻保存您的选票凭证！</h2>
+                <p style="font-size: 15px; line-height: 1.6;">为了保证绝对的零知识匿名，系统现已<strong>彻底销毁您的实名绑定信息</strong>。如果您未来想在公示大盘验证自己的选票是否被后台篡改，<strong>必须</strong>依靠以下三个数据进行密码学核算。</p>
+                <p style="color: #dc3545; font-weight: bold; font-size: 14px;">一旦关闭此页面，全宇宙将没有任何人能帮您找回这组凭证！请立刻拍照或复制保存：</p>
+                
+                <div style="background: #ffffff; padding: 15px; border-radius: 6px; font-family: 'Courier New', Courier, monospace; font-size: 14px; border: 1px solid #ffeeba; margin-top: 15px;">
+                    <div style="margin-bottom: 10px;"><strong>1. 秘密凭证 (Secret Sn)</strong>: <span style="color: #1a73e8; font-weight: bold; font-size: 16px;">${finalVote.Sn}</span></div>
+                    <div style="margin-bottom: 10px;"><strong>2. 投递选项 (Chosen r)</strong>: <span style="color: #28a745; font-weight: bold; font-size: 16px;">${finalVote.r}</span></div>
+                    <div><strong>3. 真实签名 (RSA S)</strong>: <br><span style="word-break: break-all; font-size: 12px; color: #666;">${finalVote.S}</span></div>
+                </div>
 
-                        <button onclick="window.location.href='../index.html'" style="margin-top: 20px; width: 100%; background-color: #4caf50; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold;">我已妥善保存，安全返回首页大厅</button>
-                    </div>
-                `;
+                <button onclick="window.location.href='../index.html'" style="margin-top: 20px; width: 100%; background-color: #4caf50; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold;">我已妥善保存，安全返回首页大厅</button>
+            </div>
+        `;
 
                 // 将回执单插入到控制台上方
                 document.querySelector('.container').insertBefore(receiptDiv, consoleDiv);
@@ -381,6 +389,12 @@
             }
         }
     </script>
+
+
+    <script src="../js/behavior_collector.js"></script>
+
+    <script src="../js/vote_crypto.js"></script>
+
 
 </body>
 

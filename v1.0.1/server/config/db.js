@@ -20,7 +20,7 @@ const pool = mysql.createPool({
     host: process.env.DB_HOST || '127.0.0.1',
     user: process.env.DB_USER || 'root',
     // 兼容可能存在的不同环境变量命名 (DB_PASS 或 DB_PASSWORD)
-    password: process.env.DB_PASS || process.env.DB_PASSWORD || '123456',
+    password: process.env.DB_PASS || process.env.DB_PASSWORD || 'geshuai1234!',
     database: process.env.DB_NAME || 'voting_system',
 
     // 【高并发核心配置】

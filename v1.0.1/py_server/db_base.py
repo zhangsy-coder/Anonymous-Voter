@@ -11,7 +11,7 @@ from pymysql import Error
 DB_CONFIG = {
     "host": "localhost",
     "user": "root",
-    "password": "123456",  # 请修改为自己的数据库密码
+    "password": "geshuai1234!",  # 请修改为自己的数据库密码
     "port": 3306,  # MySQL默认端口
     "database": "voting_system",  # 数据库名称，后续会自动创建
     "charset": "utf8mb4",  # 使用utf8mb4字符集支持更多字符（如表情符号）
@@ -210,6 +210,32 @@ def create_all_tables():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='胁迫影子投票表（不计入真实结果）';
     """
 
+    # 6. 女巫攻击行为特征日志表 (无监督异常检测训练数据源)
+    sql_sybil_behavior_log = """
+    CREATE TABLE IF NOT EXISTS sybil_behavior_log (
+        id INT AUTO_INCREMENT PRIMARY KEY COMMENT '记录ID',
+        sn VARCHAR(128) NOT NULL COMMENT '匿名凭证(非身份)',
+        project_id INT NOT NULL COMMENT '项目ID',
+        dwell_time DOUBLE DEFAULT 0 COMMENT '页面停留时间(秒)',
+        total_distance DOUBLE DEFAULT 0 COMMENT '鼠标累计移动距离(像素)',
+        avg_speed DOUBLE DEFAULT 0 COMMENT '鼠标平均移动速度(像素/毫秒)',
+        jitter_rate DOUBLE DEFAULT 0 COMMENT '方向突变率(突变次数/总距离)',
+        move_count INT DEFAULT 0 COMMENT '鼠标移动事件总数',
+        key_count INT DEFAULT 0 COMMENT '键盘事件总数',
+        click_count INT DEFAULT 0 COMMENT '点击事件总数',
+        scroll_count INT DEFAULT 0 COMMENT '滚动事件总数',
+        max_pause DOUBLE DEFAULT 0 COMMENT '相邻鼠标事件间最大停顿(毫秒)',
+        accel_variance DOUBLE DEFAULT 0 COMMENT '鼠标加速度方差',
+        is_sybil TINYINT(1) DEFAULT 0 COMMENT '是否判定为女巫攻击(1=是 0=否)',
+        anomaly_score DOUBLE DEFAULT 0 COMMENT '异常分数(越负越异常)',
+        detect_reason VARCHAR(1024) DEFAULT '' COMMENT '判定原因',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
+        KEY idx_project (project_id),
+        KEY idx_sybil (is_sybil),
+        KEY idx_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='女巫攻击行为特征日志表';
+    """
+
     try:
         cur.execute(users)
         cur.execute(projects)
@@ -221,6 +247,7 @@ def create_all_tables():
         cur.execute(sql_vote_stat)
         cur.execute(sql_ai_security_log)
         cur.execute(sql_shadow_votes)
+        cur.execute(sql_sybil_behavior_log)
         conn.commit()
         print("SaaS多租户升级完毕：全部数据表创建成功或已存在")
     except Error as e:

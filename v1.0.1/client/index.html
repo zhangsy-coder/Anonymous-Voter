@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 🚀 补充缺失的配置引入 -->
     <script src="./js/config.js"></script>
     <title>SaaS 多项目投票平台 - 门户首页</title>
     <link rel="stylesheet" href="./css/style.css">
@@ -139,6 +140,7 @@
             border-radius: 6px;
             transition: all 0.2s;
         }
+
         .register-link:hover {
             background-color: #28a745;
             color: white;
@@ -194,8 +196,15 @@
         async function loadHistoryShowcase() {
             const container = document.getElementById('history-container');
             try {
+                // 发起网络请求
                 const response = await fetch(`${window.APP_CONFIG.NODE_API}/api/projects/public_ended_list`);
+                // 🚀 核心改进 1：拦截 HTTP 错误状态码（如 500, 502, 404）
+                if (!response.ok) {
+                    throw new Error(`后端异常！状态码: ${response.status} (${response.statusText})`);
+                }
+
                 const data = await response.json();
+
                 if (data.success && data.data.length > 0) {
                     container.innerHTML = '';
                     data.data.forEach(proj => {
@@ -217,10 +226,13 @@
                     container.innerHTML = '<p style="color: #94a3b8; text-align: center; font-size: 13px; padding-top: 20px;">📭 暂无已结束并封盘的投票项目公示。</p>';
                 }
             } catch (err) {
-                container.innerHTML = '<p style="color: red; text-align: center; font-size: 12px; padding-top: 20px;">🔴 网关离线，无法加载成果公示。</p>';
+                // 🚀 核心改进 2：将真实的错误原因 (err.message) 抛出到页面上
+                console.error("加载历史公示详细报错:", err);
+                container.innerHTML = `<p style="color: red; text-align: center; font-size: 13px; padding-top: 20px;">🔴 加载失败：${err.message}</p>`;
             }
         }
     </script>
+
 </body>
 
 </html>
