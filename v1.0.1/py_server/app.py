@@ -21,8 +21,22 @@ from hash_chain import (
 )
 # 引入本地 AI 审计模块
 from hash_chain import ai_content_security_audit
+# 引入女巫攻击检测模块 (第四道防线：基于行为特征的无监督异常检测)
+from sybil_detector import SybilDetector, log_behavior
 
 app = Flask(__name__)
+
+# 🛡️ 女巫检测器全局单例（惰性初始化，避免 sklearn 拖慢启动）
+sybil_detector = None
+
+def get_sybil_detector():
+    """获取或创建女巫检测器实例，并在首次调用时尝试训练"""
+    global sybil_detector
+    if sybil_detector is None:
+        sybil_detector = SybilDetector(contamination=0.1)
+        print("🔍 [女巫检测] 正在用历史行为数据训练 Isolation Forest 模型...")
+        sybil_detector.fit_on_historical()
+    return sybil_detector
 
 # 【关键配置】：开启全局 CORS 跨域资源共享
 # 允许前端 (Live Server) 在匿名投递阶段、以及首页沙盒自检阶段，直接跨越 Node.js 访问底层 Python 节点
@@ -196,6 +210,54 @@ def cast_vote():
                 ),
                 403,  # 返回标准拒绝状态码
             )
+
+        # =====================================================================
+        # 🛡️ 【第四道防线】：基于深度学习的女巫攻击行为异常检测
+        # 提取非身份行为特征（鼠标轨迹、时间间隔、页面停留等），
+        # 使用规则引擎 + Isolation Forest 无监督学习实时识别自动化脚本/僵尸网络
+        # =====================================================================
+        behavior_features_raw = data.get("behavior_features")
+        if behavior_features_raw and len(behavior_features_raw) >= 10:
+            feature_names = [
+                "dwell_time", "total_distance", "avg_speed", "jitter_rate",
+                "move_count", "key_count", "click_count", "scroll_count",
+                "max_pause", "accel_variance"
+            ]
+            features = dict(zip(feature_names, behavior_features_raw))
+
+            detector = get_sybil_detector()
+            is_sybil, anomaly_score, sybil_reason = detector.predict(features)
+
+            # 无论是否拦截，都记录行为特征用于后续模型迭代
+            log_behavior(Sn, project_id, features, is_sybil, anomaly_score, sybil_reason)
+
+            if is_sybil:
+                print(f"❌ [女巫拦截] 行为模式异常！{sybil_reason}")
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": f"🛡️【女巫攻击防御】检测到自动化脚本行为，投票已被拦截。原因：{sybil_reason}"
+                        }
+                    ),
+                    403,
+                )
+            else:
+                print(f"✅ [女巫放行] 行为特征正常，异常分数 {anomaly_score:.4f}")
+        else:
+            # 无行为特征时（如 API 直调），记录并标记为可疑
+            log_behavior(Sn, project_id, {}, True, -1.0, "[规则引擎] 缺少前端行为特征数据，疑似API直调")
+            print(f"❌ [女巫拦截] 缺少行为特征数据，疑似API直调")
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "🛡️【女巫攻击防御】无法验证行为特征，投票请求被拒绝。请通过网页端正常操作。"
+                    }
+                ),
+                403,
+            )
+
         # 一切安全，批准入块存证
         success, msg = add_vote_to_chain(project_id, Sn, r, S_hex)
 

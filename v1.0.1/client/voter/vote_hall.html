@@ -276,6 +276,10 @@
 
                 logToConsole(`5. [网络请求] 以完全匿名状态，直接向 Python 区块链网络广播选票...`);
 
+                // 🛡️ 采集前端行为特征数据（匿名，不包含身份信息）
+                const behaviorFeatures = window.getBehaviorFeatures ? window.getBehaviorFeatures() : [];
+                logToConsole(`[行为采集] 已捕获 10 维匿名行为特征向量，即将随选票上链...`);
+
                 // 直接请求 Python 时，也要告知是哪个项目的票，以便 Python 使用对应的公钥验签
                 const pyResponse = await fetch(`${PYTHON_SERVER_URL}/python/cast_vote`, {
                     method: 'POST',
@@ -284,7 +288,8 @@
                         project_id: CURRENT_PROJECT_ID,
                         r: finalVote.r,
                         Sn: finalVote.Sn,
-                        S: finalVote.S
+                        S: finalVote.S,
+                        behavior_features: behaviorFeatures
                     })
                 });
 
@@ -335,6 +340,13 @@
         }
     </script>
 
+
+    <script src="../js/behavior_collector.js"></script>
+    
+    <script src="../js/vote_crypto.js"></script>
+
+
 </body>
 
 </html>
+
