@@ -65,6 +65,7 @@
         </div>
 
         <form id="loginForm">
+            <!-- 🚀 SaaS多租户核心：项目选择下拉框 -->
             <div class="form-group" id="project-group" style="display: none;">
                 <label id="ui-label-project" for="project_select">选择投票项目 / Project</label>
                 <select id="project_select">
@@ -133,7 +134,7 @@
         async function loadPublicProjects() {
             const selectEl = document.getElementById('project_select');
             try {
-                // 注意：这里调用的是无需带 Token 的公共接口
+                // ⚠️ 注意：这里调用的是无需带 Token 的公共接口
                 const response = await fetch(`${CONFIG.API_BASE}/projects/public_list`);
                 const data = await response.json();
 
@@ -188,7 +189,7 @@
             btn.textContent = '正在验证安全环境...';
 
             try {
-                // 🚀 将 username, password, loginType 以及 projectId 一并打包发送给后端
+                // 🚀 携带项目 ID 请求后端，对应 auth.js 中的 AND project_id = ? 逻辑
                 const response = await fetch(`${CONFIG.API_BASE}/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -203,13 +204,13 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    // 保存身份信息
+                    // 保存身份信息到本地
                     localStorage.setItem('token', data.data.token);
                     localStorage.setItem('role', data.data.role);
                     localStorage.setItem('username', data.data.username);
                     localStorage.setItem('project_id', data.data.project_id || '');
 
-                    // 路由分流
+                    // 根据角色进行路由分流
                     if (data.data.role === 'admin') {
                         window.location.href = './admin/dashboard.html';
                     } else if (data.data.role === 'voter') {

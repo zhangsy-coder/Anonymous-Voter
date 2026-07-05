@@ -1,6 +1,7 @@
 # 数据库基础连接、Python建表、初始化
 # ---------------------------------------------------------------------------------------------
 # 功能说明：数据库全局配置、自动建库建表、通用增删改查工具、事务支持，项目所有数据库操作均依赖此底层模块
+# 架构升级：已升级为 SaaS 多租户逻辑隔离架构，支持跨项目同名账号互不干扰
 # ---------------------------------------------------------------------------------------------
 
 import pymysql
@@ -33,7 +34,7 @@ def get_db_connection():
             autocommit=False,
         )
         cur = conn.cursor(pymysql.cursors.DictCursor)
-        return conn, cur  # 返回连接和游标对象
+        return conn, cur
     except Error as e:
         print(f"数据库连接失败：{e}")
         return None, None
@@ -52,11 +53,11 @@ def create_database():
             charset=DB_CONFIG["charset"],
         )
         cur = conn.cursor()
-        sql = f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']} DEFAULT CHARACTER SET utf8mb4"  # 创建数据库并设置默认字符集为utf8mb4
-        cur.execute(sql)  # 执行创建数据库的SQL语句
-        conn.commit()  # 提交事务
-        cur.close()  # 关闭游标
-        conn.close()  # 关闭连接
+        sql = f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']} DEFAULT CHARACTER SET utf8mb4"
+        cur.execute(sql)
+        conn.commit()
+        cur.close()
+        conn.close()
         print(f"数据库 {DB_CONFIG['database']} 初始化成功或已存在")
     except Error as e:
         print(f"创建数据库失败：{e}")
@@ -64,28 +65,28 @@ def create_database():
 
 def create_all_tables():
     """
-    Python代码自动创建全部4张表
-    vote_main / hash_chain / system_log / vote_stat
+    Python代码自动创建全部数据表
+    SaaS多租户升级：通过 project_id 实现物理同表、逻辑隔离
     """
     conn, cur = get_db_connection()
     if not conn:
         return
 
-    
-    # 管理员主表
+    # 🚀 核心改造 1：多租户用户表 (取消全局UNIQUE，改为联合UNIQUE)
     users = """
     CREATE TABLE IF NOT EXISTS users (
         id INT PRIMARY KEY AUTO_INCREMENT,
-        username VARCHAR(50) UNIQUE NOT NULL,
+        username VARCHAR(50) NOT NULL COMMENT '账号名称（已取消全局唯一）',
         password VARCHAR(255) NOT NULL,
         salt VARCHAR(64),
-        role ENUM('admin', 'voter') DEFAULT 'voter',
-        project_id INT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        role ENUM('admin', 'voter') DEFAULT 'voter' COMMENT '角色身份',
+        project_id INT COMMENT '租户/项目ID（隔离关键）',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_project_username (project_id, username) COMMENT '联合唯一：限制同一项目内账号不得重复'
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统全局多租户用户表';
     """
 
-    #项目表（依赖 users 表）
+    # 项目表（依赖 users 表）
     projects = """
     CREATE TABLE IF NOT EXISTS projects (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -96,10 +97,10 @@ def create_all_tables():
         created_by_name VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='投票项目大盘';
     """
     
-    #候选人表 (级联隔离：项目删除时自动清理名下候选人)
+    # 候选人表 (级联隔离：项目删除时自动清理名下候选人)
     candidates = """
     CREATE TABLE IF NOT EXISTS candidates (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -111,10 +112,10 @@ def create_all_tables():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
         UNIQUE KEY uk_proj_serial (project_id, serial_no)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='租户候选人隔离表';
     """  
     
-    #实名领票核销记录表
+    # 实名领票核销记录表
     signature_logs = """
     CREATE TABLE IF NOT EXISTS signature_logs (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -124,7 +125,7 @@ def create_all_tables():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='选民领票核销记录';
     """
     
     # 1. 投票主表
@@ -180,7 +181,8 @@ def create_all_tables():
         update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='投票汇总统计表';
     """
-    # 5. AI安全边界防御拦截日志表 (信安竞赛专属扩展)
+    
+    # 5. AI安全边界防御拦截日志表
     sql_ai_security_log = """
     CREATE TABLE IF NOT EXISTS ai_security_log (
         log_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '拦截记录ID',
@@ -203,7 +205,7 @@ def create_all_tables():
         cur.execute(sql_vote_stat)
         cur.execute(sql_ai_security_log)
         conn.commit()
-        print("全部数据表创建成功或已存在")
+        print("SaaS多租户升级完毕：全部数据表创建成功或已存在")
     except Error as e:
         conn.rollback()
         print(f"建表失败：{e}")
@@ -219,11 +221,11 @@ def db_insert(sql, params):
     if not conn:
         return False, 0
     try:
-        cur.execute(sql, params)  # 执行插入SQL语句
-        conn.commit()  # 提交事务
+        cur.execute(sql, params)
+        conn.commit()
         return True, cur.lastrowid
     except Error as e:
-        conn.rollback()  # 回滚事务
+        conn.rollback()
         print("插入失败：", e)
         return False, 0
     finally:
@@ -233,12 +235,12 @@ def db_insert(sql, params):
 
 def db_query_all(sql, params=None):
     """通用查询所有"""
-    conn, cur = get_db_connection()  # 获取数据库连接和游标
+    conn, cur = get_db_connection()
     if not conn:
         return []
     try:
-        cur.execute(sql, params or ())  # 执行查询SQL语句，params默认为空元组
-        return cur.fetchall()  # 获取所有查询结果并返回
+        cur.execute(sql, params or ())
+        return cur.fetchall()
     except Error as e:
         print("查询失败：", e)
         return []
@@ -253,11 +255,11 @@ def db_update(sql, params):
     if not conn:
         return False
     try:
-        cur.execute(sql, params)  # 执行更新SQL语句
-        conn.commit()  # 提交事务
+        cur.execute(sql, params)
+        conn.commit()
         return True
     except Error as e:
-        conn.rollback()  # 回滚事务
+        conn.rollback()
         print("更新失败：", e)
         return False
     finally:

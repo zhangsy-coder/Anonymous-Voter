@@ -110,7 +110,7 @@ router.get('/public_results/:id', async (req, res) => {
 
 /**
  * @route   GET /api/projects/list
- * @desc    🆕 改进：只返回当前管理员自己创建的项目列表（多管理员隔离）
+ * @desc    只返回当前管理员自己创建的项目列表（多管理员隔离）
  * @access  Private
  */
 router.get('/list', verifyToken, isAdmin, async (req, res) => {
@@ -129,7 +129,7 @@ router.get('/list', verifyToken, isAdmin, async (req, res) => {
 
 /**
  * @route   POST /api/projects/create
- * @desc    🆕 改进：创建项目时自动绑定当前管理员ID
+ * @desc    创建项目时自动绑定当前管理员ID
  * @access  Private
  */
 router.post('/create', verifyToken, isAdmin, async (req, res) => {
@@ -165,7 +165,7 @@ router.post('/create', verifyToken, isAdmin, async (req, res) => {
 
 /**
  * @route   GET /api/projects/check_owner/:id
- * @desc    🆕 新增：检查当前管理员是否为该项目的创建者
+ * @desc    检查当前管理员是否为该项目的创建者
  * @access  Private
  */
 router.get('/check_owner/:id', verifyToken, isAdmin, async (req, res) => {
@@ -180,7 +180,8 @@ router.get('/check_owner/:id', verifyToken, isAdmin, async (req, res) => {
         if (projects.length === 0) {
             return res.status(404).json({ success: false, message: '项目不存在' });
         }
-        const isOwner = projects[0].created_by === adminId;
+        // 🚀 核心修复：强制转为字符串比对，防止隐式类型越权拦截误判
+        const isOwner = String(projects[0].created_by) === String(adminId);
         res.json({ success: true, data: { isOwner } });
     } catch (err) {
         res.status(500).json({ success: false, message: '校验失败' });
@@ -197,12 +198,12 @@ router.post('/end/:id', verifyToken, isAdmin, async (req, res) => {
     const adminId = req.user.id;
 
     try {
-        // 🆕 校验：只有创建者才能结算
         const [project] = await db.query('SELECT created_by FROM projects WHERE id = ?', [id]);
         if (project.length === 0) {
             return res.status(404).json({ success: false, message: '项目不存在' });
         }
-        if (project[0].created_by !== adminId) {
+        // 🚀 核心修复：强制转为字符串比对
+        if (String(project[0].created_by) !== String(adminId)) {
             return res.status(403).json({ success: false, message: '您不是该项目的创建者，无权结算' });
         }
 
@@ -232,14 +233,20 @@ router.delete('/delete/:id', verifyToken, isAdmin, async (req, res) => {
     console.log(`\n🚨 [高危级联预警] 管理员 ${adminId} 正在请求物理销毁项目 [ID: ${id}]...`);
 
     try {
-        // 🆕 校验：只有创建者才能删除
         const [project] = await db.query('SELECT created_by FROM projects WHERE id = ?', [id]);
         if (project.length === 0) {
             return res.status(404).json({ success: false, message: '项目不存在' });
         }
-        if (project[0].created_by !== adminId) {
+        // 🚀 核心修复：强制转为字符串比对
+        if (String(project[0].created_by) !== String(adminId)) {
             return res.status(403).json({ success: false, message: '您不是该项目的创建者，无权删除' });
         }
+
+        // 🚀 核心修复：追加底层区块链与日志数据表的级联抹除，做到比赛级别的数据粉碎
+        await db.query('DELETE FROM vote_main WHERE project_id = ?', [id]);
+        await db.query('DELETE FROM hash_chain WHERE project_id = ?', [id]);
+        await db.query('DELETE FROM system_log WHERE project_id = ?', [id]);
+        await db.query('DELETE FROM ai_security_log WHERE project_id = ?', [id]);
 
         await db.query('DELETE FROM candidates WHERE project_id = ?', [id]);
         await db.query('DELETE FROM users WHERE project_id = ? AND role = "voter"', [id]);
@@ -248,7 +255,7 @@ router.delete('/delete/:id', verifyToken, isAdmin, async (req, res) => {
 
         console.log(`🚨 项目 [ID: ${id}] 及其关联数据已物理删除！\n`);
 
-        res.json({ success: true, message: '该投票项目及其名下的所有候选人、选民账户已彻底级联清理完毕！' });
+        res.json({ success: true, message: '该投票项目及其名下的所有候选人、选民账户与链上日志已彻底清理完毕！' });
     } catch (err) {
         console.error('执行级联销毁失败:', err);
         res.status(500).json({ success: false, message: '级联销毁项目失败' });

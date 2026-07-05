@@ -22,7 +22,6 @@ const JWT_SECRET = 'my_super_secret_key_12345';
 router.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
-    // 1. 输入校验
     if (!username || !password) {
         return res.status(400).json({ success: false, message: '用户名和密码不能为空' });
     }
@@ -31,18 +30,17 @@ router.post('/register', async (req, res) => {
     }
 
     try {
-        // 2. 检查用户名是否已被占用
-        const [rows] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
+        // 🚀 核心修改点：防止全局扫描，仅检查主办方(admin)中是否已存在该账号
+        const [rows] = await db.query('SELECT * FROM users WHERE username = ? AND role = "admin"', [username]);
         if (rows.length > 0) {
-            return res.status(409).json({ success: false, message: '用户名已被注册' });
+            return res.status(409).json({ success: false, message: '该主办方账号名称已被注册' });
         }
 
-        // 3. 加密密码
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 4. 插入新用户，角色默认为 admin（可创建项目）
+        // 插入新用户，角色为 admin，project_id 默认为 NULL（因为主办方管理全局项目）
         const [result] = await db.query(
-            'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+            'INSERT INTO users (username, password, role, project_id) VALUES (?, ?, ?, NULL)',
             [username, hashedPassword, 'admin']
         );
 
@@ -78,12 +76,14 @@ router.post('/login', async (req, res) => {
         let users = [];
 
         if (loginType === 'admin') {
+            // 主办方独立登录通道
             const [rows] = await db.query(
                 'SELECT * FROM users WHERE username = ? AND role = "admin"',
                 [username]
             );
             users = rows;
         } else {
+            // 🚀 SaaS 租户隔离查询通道（精确定位某一个项目下的某一个选民）
             const [rows] = await db.query(
                 'SELECT * FROM users WHERE username = ? AND project_id = ? AND role = "voter"',
                 [username, project_id]
@@ -92,7 +92,7 @@ router.post('/login', async (req, res) => {
         }
 
         if (users.length === 0) {
-            return res.status(401).json({ success: false, message: '账号或密码错误' });
+            return res.status(401).json({ success: false, message: '账号或密码错误（或非该项目选民）' });
         }
 
         const user = users[0];
